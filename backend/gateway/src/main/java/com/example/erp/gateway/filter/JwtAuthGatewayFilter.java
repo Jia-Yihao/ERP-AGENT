@@ -37,7 +37,7 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
 
     private static final List<String> WHITELIST = List.of(
             "/api/auth/login", "/api/auth/token", "/api/auth/refresh",
-            "/actuator/health", "/v3/api-docs", "/swagger-ui");
+            "/actuator/health", "/v3/api-docs", "/swagger-ui", "/fallback");
 
     public JwtAuthGatewayFilter(ObjectMapper mapper,
                                 @Value("${erp.jwt.secret:erp-local-development-secret-key-32bytes-minimum}") String secret) {

@@ -4,6 +4,14 @@ spring:
   application:
     name: report-service
   cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+      client:
+        config:
+          default:
+            connect-timeout: 3000
+            read-timeout: 5000
     compatibility-verifier:
       enabled: false
     nacos:
@@ -31,3 +39,17 @@ management:
   endpoint:
     health:
       show-details: always
+resilience4j:
+  circuitbreaker:
+    instances:
+      reportDownstream:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+  retry:
+    instances:
+      reportDownstream:
+        maxAttempts: 3
+        waitDuration: 200ms

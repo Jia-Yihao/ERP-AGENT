@@ -5,6 +5,14 @@ spring:
     name: order-service
 
   cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+      client:
+        config:
+          default:
+            connect-timeout: 3000
+            read-timeout: 5000
     compatibility-verifier:
       enabled: false
     nacos:

@@ -21,12 +21,14 @@ public class LocalCacheService implements CacheService {
     @Override
     public <T> Optional<T> get(String key, Class<T> type) {
         Object v = cache.getIfPresent(key);
-        return v == null ? Optional.empty() : Optional.of(type.cast(v));
+        if (v == null) return Optional.empty();
+        if (NULL_MARKER.equals(v)) return Optional.empty();
+        return Optional.of(type.cast(v));
     }
 
     @Override
     public <T> void put(String key, T value, Duration ttl) {
-        if (value != null) cache.put(key, value);
+        cache.put(key, value == null ? NULL_MARKER : value);
     }
 
     @Override
@@ -37,9 +39,13 @@ public class LocalCacheService implements CacheService {
         cache.asMap().keySet().removeIf(k -> k.startsWith(prefix));
     }
 
+    /** 空值缓存防穿透；Caffeine 的原子 get 保证同 key 只加载一次，防击穿。 */
     @Override
     public <T> T getOrLoad(String key, Class<T> type, Duration ttl, Supplier<T> loader) {
-        Object v = cache.get(key, k -> loader.get());
-        return v == null ? null : type.cast(v);
+        Object v = cache.get(key, k -> {
+            T loaded = loader.get();
+            return loaded == null ? NULL_MARKER : loaded;
+        });
+        return NULL_MARKER.equals(v) ? null : type.cast(v);
     }
 }

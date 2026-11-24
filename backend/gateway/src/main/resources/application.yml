@@ -3,6 +3,10 @@ server:
 spring:
   application:
     name: gateway-service
+  config:
+    import: 'optional:nacos:${spring.application.name}.yml'
+  autoconfigure:
+    exclude: ''
   cloud:
     compatibility-verifier:
       enabled: false
@@ -10,6 +14,8 @@ spring:
       server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
       discovery:
         namespace: '${NACOS_NAMESPACE:public}'
+        register-enabled: '${NACOS_REGISTER_ENABLED:false}'
+        fail-fast: false
       config:
         namespace: '${NACOS_NAMESPACE:public}'
         file-extension: yml
@@ -24,11 +30,11 @@ spring:
         - id: catalog-route
           uri: lb://catalog-service
           predicates:
-            - Path=/api/suppliers/**,/api/parts/**
+            - Path=/api/suppliers/**,/api/parts/**,/api/quotes/**,/api/performance/**
         - id: order-route
           uri: lb://order-service
           predicates:
-            - Path=/api/orders/**
+            - Path=/api/orders/**,/api/requisitions/**,/api/receive/**,/api/outbox/**
         - id: inventory-route
           uri: lb://inventory-service
           predicates:
@@ -37,6 +43,11 @@ spring:
           uri: lb://auth-service
           predicates:
             - Path=/api/auth/**
+      default-filters:
+        - name: CircuitBreaker
+          args:
+            name: erpBackend
+            fallbackUri: forward:/fallback
 erp:
   security:
     enabled: '${ERP_SECURITY_ENABLED:true}'
@@ -47,32 +58,17 @@ erp:
     refill-per-second: 10
   cache:
     type: local
-spring:
-  cloud:
-    compatibility-verifier:
-      enabled: false
-    nacos:
-      server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
-      discovery:
-        namespace: '${NACOS_NAMESPACE:public}'
-      config:
-        namespace: '${NACOS_NAMESPACE:public}'
-        file-extension: yml
-        refresh-enabled: true
-        import-check:
-          enabled: false
-    gateway:
-      default-filters:
-        - name: CircuitBreaker
-          args:
-            name: erpBackend
-            fallbackUri: forward:/fallback
-
 management:
   health:
     nacos-discovery:
       enabled: false
     nacos-config:
+      enabled: false
+    redis:
+      enabled: false
+    discoveryComposite:
+      enabled: false
+    reactiveDiscoveryClients:
       enabled: false
   endpoints:
     web:
@@ -90,3 +86,12 @@ management:
   metrics:
     tags:
       application: '${spring.application.name}'
+resilience4j:
+  circuitbreaker:
+    instances:
+      erpBackend:
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 15s
+        permittedNumberOfCallsInHalfOpenState: 5
