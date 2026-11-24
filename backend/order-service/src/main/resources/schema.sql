@@ -110,3 +110,14 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   version INT NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS undo_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  branch_id BIGINT NOT NULL,
+  xid VARCHAR(128) NOT NULL,
+  context VARCHAR(128) NOT NULL,
+  rollback_info BLOB NOT NULL,
+  log_status INT NOT NULL,
+  log_created DATETIME NOT NULL,
+  log_modified DATETIME NOT NULL,
+  CONSTRAINT ux_undo_log UNIQUE (xid, branch_id)
+);

@@ -7,6 +7,8 @@ x-app-env: &app-env
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+  SENTINEL_DASHBOARD: sentinel-dashboard:8080
+  SEATA_SERVER_ADDR: seata-server:7091
   JAVA_OPTS: -Xms256m -Xmx512m
   # HS256 密钥须 >=32 字节；内部调用 HMAC 未配置时一律拒绝
   ERP_JWT_SECRET: ${ERP_JWT_SECRET:-erp-cloud-dev-jwt-secret-change-me-32bytes}
@@ -72,6 +74,7 @@ services:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./configs/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     networks:
       - erp-net
     healthcheck:
@@ -136,6 +139,46 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  seata-server:
+    image: seataio/seata-server:2.1.0
+    container_name: erp-seata-server
+    environment:
+      SEATA_CONFIG_NAME: file:/root/seata-config/registry
+      SEATA_IP: seata-server
+      SEATA_PORT: "7091"
+    volumes:
+      - ./configs/seata:/root/seata-config:ro
+    ports:
+      - "7091:7091"
+      - "8091:8091"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7091/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  sentinel-dashboard:
+    image: registry.cn-hangzhou.aliyuncs.com/acs/sentinel-dashboard:1.8.8
+    container_name: erp-sentinel-dashboard
+    environment:
+      JAVA_OPTS: -Dserver.port=8080 -Dcsp.sentinel.dashboard.server=localhost:8080 -Dproject.name=sentinel-dashboard
+    ports:
+      - "8080:8080"
+    networks:
+      - erp-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
       interval: 15s
       timeout: 5s
       retries: 10

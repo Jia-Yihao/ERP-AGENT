@@ -9,6 +9,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+/**
+ * 访问日志：记录 traceId、方法、路径、下游状态与耗时。
+ * 响应头在 doFinally 阶段已只读，X-Trace-Id 由 TraceIdFilter 注入请求、
+ * CorsFilter 暴露，此处只记录不改写响应头。
+ */
 @Slf4j
 @Component
 public class AccessLogFilter implements GlobalFilter, Ordered {
@@ -23,7 +28,6 @@ public class AccessLogFilter implements GlobalFilter, Ordered {
                     ? 0 : exchange.getResponse().getStatusCode().value();
             String traceId = exchange.getRequest().getHeaders().getFirst(Constants.TRACE_ID_HEADER);
             log.info("traceId={} {} {} status={} cost={}ms", traceId, method, path, status, cost);
-            exchange.getResponse().getHeaders().set(Constants.TRACE_ID_HEADER, traceId == null ? "" : traceId);
         });
     }
 

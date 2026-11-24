@@ -36,6 +36,20 @@ public class ReceiveController {
         return R.ok(service.create(receive));
     }
 
+    /** Seata 全局事务版本：本地收货 + 跨服务库存入库，失败时两库一起回滚。 */
+    @PostMapping("/create-with-stock")
+    public R<PurchaseReceive> createWithStock(@Valid @RequestBody ReceiveCreateDTO body) {
+        PurchaseReceive receive = new PurchaseReceive();
+        receive.setReceiveNo(body.getReceiveNo());
+        receive.setOrderId(body.getOrderId());
+        receive.setPartId(body.getPartId());
+        receive.setQuantity(body.getQuantity());
+        receive.setReceiver(body.getReceiver());
+        receive.setReceivedAt(body.getReceivedAt());
+        receive.setStatus(body.getStatus());
+        return R.ok(service.createWithStock(receive));
+    }
+
     @GetMapping("/list/{orderId}")
     public R<List<PurchaseReceive>> list(@PathVariable Long orderId) {
         return R.ok(service.listByOrder(orderId));

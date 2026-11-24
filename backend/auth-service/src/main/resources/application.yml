@@ -3,11 +3,48 @@ server:
 spring:
   cloud:
     compatibility-verifier:
-      enabled: false
+    discovery:
+      client:
+        simple:
+          instances:
+            gateway:
+              - uri: '${STATIC_GATEWAY_URL:http://localhost:8081}'
+            catalog-service:
+              - uri: '${STATIC_CATALOG_SERVICE_URL:http://localhost:8082}'
+            order-service:
+              - uri: '${STATIC_ORDER_SERVICE_URL:http://localhost:8083}'
+            inventory-service:
+              - uri: '${STATIC_INVENTORY_SERVICE_URL:http://localhost:8084}'
+            report-service:
+              - uri: '${STATIC_REPORT_SERVICE_URL:http://localhost:8085}'
+            auth-service:
+              - uri: '${STATIC_AUTH_SERVICE_URL:http://localhost:8086}'
+    sentinel:
+      transport:
+        dashboard: '${SENTINEL_DASHBOARD:localhost:8080}'
+        port: 8719
+      eager: true
+      datasource:
+        flow:
+          nacos:
+            server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+            namespace: '${NACOS_NAMESPACE:public}'
+            data-id: '${spring.application.name}-flow-rules'
+            group-id: SENTINEL_GROUP
+            rule-type: flow
+        degrade:
+          nacos:
+            server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+            namespace: '${NACOS_NAMESPACE:public}'
+            data-id: '${spring.application.name}-degrade-rules'
+            group-id: SENTINEL_GROUP
+            rule-type: degrade
     nacos:
       server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
       discovery:
         namespace: '${NACOS_NAMESPACE:public}'
+        register-enabled: '${NACOS_REGISTER_ENABLED:false}'
+        fail-fast: false
   config:
     import: 'optional:nacos:${spring.application.name}.yml'
   application:
@@ -45,3 +82,16 @@ erp:
     permit-all: /api/auth/login,/api/auth/token,/api/auth/refresh,/actuator/health/**,/v3/api-docs/**,/swagger-ui/**
   mcp:
     client-secret: '${ERP_MCP_CLIENT_SECRET:change-me}'
+management:
+  health:
+    nacos-discovery:
+      enabled: false
+    nacos-config:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always

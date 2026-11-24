@@ -1,0 +1,10 @@
+[
+  {
+    "resource": "GET:/api/parts/get/{id}",
+    "count": 500,
+    "timeWindow": 10,
+    "grade": 0,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000
+  }
+]

@@ -2,7 +2,11 @@ package com.example.erp.order.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.erp.common.core.BizException;
+import com.example.erp.common.core.ErrorCode;
+import com.example.erp.common.core.R;
 import com.example.erp.common.core.UserContextHolder;
+import com.example.erp.order.client.InventoryClient;
+import io.seata.spring.annotation.GlobalTransactional;
 import com.example.erp.order.entity.OrderStatusLog;
 import com.example.erp.order.entity.OutboxEvent;
 import com.example.erp.order.entity.PurchaseOrder;
@@ -16,6 +20,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +30,7 @@ public class ReceiveService {
     private final OrderService orderService;
     private final OutboxService outboxService;
     private final OrderStateMachine stateMachine;
+    private final InventoryClient inventoryClient;
 
     public List<PurchaseReceive> listByOrder(Long orderId) {
         return mapper.selectList(new LambdaQueryWrapper<PurchaseReceive>()
@@ -74,5 +80,21 @@ public class ReceiveService {
                 body.getId(), body.getOrderId(), body.getPartId(), body.getQuantity()));
         outboxService.publish(event);
         return body;
+    }
+
+    /**
+     * 收货并同步入库：本地写收货单/状态日志，跨服务调用 inventory-service 入库。
+     * Seata AT 模式保证两库一致；本地 seata.enabled=false 时注解为 no-op。
+     */
+    @GlobalTransactional(name = "purchase-receive-with-stock", rollbackFor = Exception.class)
+    @Transactional
+    public PurchaseReceive createWithStock(PurchaseReceive body) {
+        PurchaseReceive receive = create(body);
+        R<Map<String, Object>> stock = inventoryClient.inbound(
+                body.getPartId(), body.getQuantity(), null);
+        if (stock == null || stock.getCode() != ErrorCode.OK.getCode()) {
+            throw new BizException(ErrorCode.SERVICE_UNAVAILABLE);
+        }
+        return receive;
     }
 }

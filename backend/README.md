@@ -25,11 +25,21 @@
 
 Gateway 只路由 `/api/**`，`/internal/**` 不对外暴露。订单明细的 `partName / supplierName` 与库存 VO 的嵌套 `partDetail` 由 OpenFeign 调用 `catalog-service` 批量组装，一次请求取回全部零件信息，避免逐条 N+1 调用。
 
-23 条契约中不存在跨服务写操作，每个服务的写事务仍由本地 `@Transactional` 保证；跨服务只发生在读取维度，因此未引入分布式事务组件。
+23 条原 MCP 契约中不存在跨服务写操作；`POST /api/receives/create-with-stock` 是收货与库存入库的跨服务写场景，由 Seata AT 模式保证两库一致。
 
 ## 技术栈
 
-Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2（Nacos 注册与配置）、Spring Cloud Gateway、OpenFeign + LoadBalancer + Resilience4j、Spring Security 6 + jjwt 0.12.5（HS256 双层校验）、MyBatis-Plus 3.5.9（分页上限 100、乐观锁、逻辑删除、防全表更新）、MapStruct 1.5.5、Redis（Lettuce）/ Caffeine 双实现、H2（默认）/ MySQL 8、Actuator + Micrometer + Prometheus + Zipkin、Maven 3.9。父 POM 统一版本与插件管理，编译期挂 Lombok 与 MapStruct 注解处理器。
+Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2（Nacos 注册与配置、Sentinel 1.8.8 流控熔断、Seata 2.1.0 AT 事务）、Spring Cloud Gateway 4.1.3、OpenFeign + LoadBalancer + Resilience4j、Spring Security 6 + jjwt 0.12.5（HS256 双层校验）、MyBatis-Plus 3.5.9（分页上限 100、乐观锁、逻辑删除、防全表更新）、MapStruct 1.5.5、Redis（Lettuce）/ Caffeine 双实现、H2（默认）/ MySQL 8、Actuator + Micrometer + Prometheus + Zipkin、Maven 3.9。父 POM 统一版本与插件管理，编译期挂 Lombok 与 MapStruct 注解处理器。
+
+### 五项核心组件
+
+- **Nacos**：注册中心与配置中心，各服务 `spring.config.import=optional:nacos:...`；无 Nacos 时以 `SimpleDiscoveryClient` 静态实例解析 `lb://`，`NACOS_REGISTER_ENABLED=true` 或 docker profile 切换到真实注册。
+- **OpenFeign**：四个客户端均配置 `fallbackFactory`，统一超时 3s/5s；`TraceIdRequestInterceptor` 透传 traceId 与用户上下文头。
+- **Sentinel**：网关与五个业务服务接入 dashboard `:8080`，流控与降级规则由 Nacos `SENTINEL_GROUP` 数据源下发，种子规则在 `configs/sentinel/`。
+- **Gateway**：4 条路由 + 6 个全局过滤器（traceId、CORS、访问日志、限流、JWT、错误改写）；本地以静态实例解析，docker profile 走 Nacos 发现。
+- **Seata**：AT 模式，`erp-tx-group` 事务组经 Nacos 发现 `seata-server`；undo_log 表已建，事务入口为 `POST /api/receives/create-with-stock`；本地 `SEATA_ENABLED=false` 时注解为 no-op。
+
+`configs/mysql/init.sql` 初始化四个业务库与 Seata 全局表，`configs/seata/` 提供注册与配置中心参数，`docker compose up -d` 一键拉起 14 个容器。网关锁定 gateway-server 4.1.3 以匹配 Spring Framework 6.1.6。
 
 Spring Cloud 2023.0.x 已结束开源支持。本工程用于微服务架构实践与本地验收，生产部署需升级到受支持的 Spring Boot / Spring Cloud release train。
 

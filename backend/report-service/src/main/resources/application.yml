@@ -13,11 +13,48 @@ spring:
             connect-timeout: 3000
             read-timeout: 5000
     compatibility-verifier:
-      enabled: false
+    discovery:
+      client:
+        simple:
+          instances:
+            gateway:
+              - uri: '${STATIC_GATEWAY_URL:http://localhost:8081}'
+            catalog-service:
+              - uri: '${STATIC_CATALOG_SERVICE_URL:http://localhost:8082}'
+            order-service:
+              - uri: '${STATIC_ORDER_SERVICE_URL:http://localhost:8083}'
+            inventory-service:
+              - uri: '${STATIC_INVENTORY_SERVICE_URL:http://localhost:8084}'
+            report-service:
+              - uri: '${STATIC_REPORT_SERVICE_URL:http://localhost:8085}'
+            auth-service:
+              - uri: '${STATIC_AUTH_SERVICE_URL:http://localhost:8086}'
+    sentinel:
+      transport:
+        dashboard: '${SENTINEL_DASHBOARD:localhost:8080}'
+        port: 8719
+      eager: true
+      datasource:
+        flow:
+          nacos:
+            server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+            namespace: '${NACOS_NAMESPACE:public}'
+            data-id: '${spring.application.name}-flow-rules'
+            group-id: SENTINEL_GROUP
+            rule-type: flow
+        degrade:
+          nacos:
+            server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+            namespace: '${NACOS_NAMESPACE:public}'
+            data-id: '${spring.application.name}-degrade-rules'
+            group-id: SENTINEL_GROUP
+            rule-type: degrade
     nacos:
       server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
       discovery:
         namespace: '${NACOS_NAMESPACE:public}'
+        register-enabled: '${NACOS_REGISTER_ENABLED:false}'
+        fail-fast: false
       config:
         namespace: '${NACOS_NAMESPACE:public}'
         file-extension: yml
