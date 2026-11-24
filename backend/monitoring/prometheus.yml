@@ -1,0 +1,35 @@
+# Prometheus 抓取配置：6 个业务服务的 actuator 指标端点
+global:
+  scrape_interval: 2s
+  evaluation_interval: 2s
+
+scrape_configs:
+  - job_name: gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["gateway:8081"]
+
+  - job_name: catalog
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["catalog:8082"]
+
+  - job_name: order
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["order:8083"]
+
+  - job_name: inventory
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["inventory:8084"]
+
+  - job_name: report
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["report:8085"]
+
+  - job_name: auth
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["auth:8086"]

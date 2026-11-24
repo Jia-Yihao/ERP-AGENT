@@ -30,6 +30,10 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# ============ Java / Maven ============
+target/
+backend/**/target/
+
 # ============ 生成文件 / 下载目录 ============
 src/download/
 

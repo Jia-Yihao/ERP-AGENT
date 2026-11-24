@@ -1,3 +1,13 @@
+INSERT INTO part_snapshot (id, name) VALUES
+(1, '火花塞'),
+(2, '机油滤清器'),
+(3, '空气滤清器'),
+(4, '刹车片'),
+(5, '刹车盘'),
+(6, '雨刮片'),
+(7, '蓄电池'),
+(8, '轮毂轴承');
+
 DELETE FROM inventory_log;
 DELETE FROM inventory;
 

@@ -123,7 +123,7 @@ TYPESAFE_MODEL=jev-1.13.0
 | **可观测性** | Langfuse（可选，默认关闭） | 元数据追踪、Token 用量与验收评分；不采集对话正文 |
 | **Agent 框架** | DeepAgent + LangGraph | 状态图引擎，支持中断/恢复/子Agent |
 | **MCP 协议** | FastMCP + SSE | Agent ↔ ERP 的工具桥接层，把 23 个工具转发到 `ERP_BASE_URL` |
-| **ERP 后端** | Java 17 + Spring Boot 3.2.5 + Spring Cloud 2023.0.5 | Eureka 注册发现、Gateway 网关、OpenFeign；`backend/` 十一模块（六个基础库 + 注册中心 + 网关 + 三个业务服务） |
+| **ERP 后端** | Java 17 + Spring Boot 3.2.5 + Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2 | Nacos 注册与配置、Gateway 网关、OpenFeign + Resilience4j、双层 JWT 校验；`backend/` 十二模块（六个基础库 + 六个服务） |
 | **ERP 持久层** | MyBatis-Plus 3.5.9 + H2 / MySQL 8 | 三个业务服务各自独立库，写事务本地 `@Transactional` |
 | **Web 框架** | FastAPI + Uvicorn | SSE 流式响应 |
 | **前端** | Next.js 16 + React 19 + TailwindCSS 4 | 流式对话 UI + 中断交互 |
@@ -170,10 +170,12 @@ TYPESAFE_MODEL=jev-1.13.0
 ┌────────────────────────────▼────────────────────────────────────┐
 │        ERP 后端：Spring Cloud 微服务集群（backend/）               │
 │   ERP_BASE_URL → Gateway :8081   对外唯一入口，路由 /api/**        │
-│   ├─ Eureka :8761              服务注册与发现                     │
-│   ├─ catalog-service :8082      供应商(5) + 零部件(5)             │
-│   ├─ order-service :8083        采购订单(7)                       │
-│   └─ inventory-service :8084    库存(6)                           │
+│   ├─ Nacos :8848               注册中心 + 配置中心（外部服务）    │
+│   ├─ auth-service :8086        登录 / 服务账号 token              │
+│   ├─ catalog-service :8082      供应商(5) + 零部件(5) + 报价绩效   │
+│   ├─ order-service :8083        订单(7) + 申请审批 + 收货 + Outbox │
+│   ├─ inventory-service :8084    库存(6) + 原子扣减                 │
+│   └─ report-service :8085       报表聚合                          │
 │   OpenFeign 跨服务装配零件信息 · 每服务独立库(H2 / MySQL 8)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -343,7 +345,7 @@ ERP-AGENT/
 │   └── package.json
 │
 ├── backend/                           # Spring Cloud 微服务 ERP（Java 17 / Maven）
-│   ├── pom.xml                        # 父 POM（11 模块聚合 + 版本与插件管理）
+│   ├── pom.xml                        # 父 POM（12 模块聚合 + 版本与插件管理）
 │   ├── .mvn/maven.config              # 本地仓库指向 D:/java/m2-repository
 │   ├── common-core/                   # R / PageResult / ErrorCode / 常量 / 跨服务 DTO
 │   ├── common-web/                    # 全局异常处理
@@ -351,11 +353,14 @@ ERP-AGENT/
 │   ├── common-cache/                  # 缓存、分布式锁、幂等
 │   ├── common-feign/                  # Feign 拦截、降级、内部签名
 │   ├── common-security/               # JWT、Security 模板、权限注解
-│   ├── registry/                      # Eureka Server           :8761
 │   ├── gateway/                       # Spring Cloud Gateway    :8081
-│   ├── catalog-service/               # 供应商 5 + 零部件 5     :8082
-│   ├── order-service/                 # 采购订单 7              :8083
-│   ├── inventory-service/             # 库存 6                  :8084
+│   ├── auth-service/                  # 认证与权限              :8086
+│   ├── catalog-service/               # 供应商 / 零件 / 报价绩效 :8082
+│   ├── order-service/                 # 订单 / 申请审批 / Outbox :8083
+│   ├── inventory-service/             # 库存与原子扣减          :8084
+│   ├── report-service/                # 报表聚合                :8085
+│   ├── docker-compose.yml             # 12 容器编排
+│   ├── monitoring/ k8s/               # Prometheus / Grafana / K8s manifests
 │   └── README.md                      # 架构、23 条契约、启动与验收清单
 │
 ├── src/                               # Python 后端（Agent / API / MCP）
@@ -477,21 +482,23 @@ MCP_SERVER_URL=http://localhost:9000
 SANDBOX_IMAGE=python:3.11-slim
 ```
 
-### 3. 启动 ERP 微服务后端（端口 8761、8081~8084）
+### 3. 启动 ERP 微服务后端（Nacos :8848、端口 8081~8086）
 
 按 `backend/README.md` 的顺序，每个服务一个终端；命令需显式带 `--server.port`，避免终端注入的 `SERVER__PORT` 覆盖配置：
 
 ```bash
 cd backend
-java -jar registry/target/erp-registry-1.0.0.jar --server.port=8761
+docker compose up -d nacos              # 或外部 Nacos :8848
+java -jar auth-service/target/erp-auth-service-1.0.0.jar --server.port=8086
 java -jar catalog-service/target/erp-catalog-service-1.0.0.jar --server.port=8082
 java -jar order-service/target/erp-order-service-1.0.0.jar --server.port=8083
 java -jar inventory-service/target/erp-inventory-service-1.0.0.jar --server.port=8084
+java -jar report-service/target/erp-report-service-1.0.0.jar --server.port=8085
 java -jar gateway/target/erp-gateway-1.0.0.jar --server.port=8081
 cd ..
 ```
 
-`registry` 先起，`catalog-service` 需早于 `order-service` 与 `inventory-service`，`gateway` 最后起；启动后可访问 http://localhost:8761 查看注册实例。仅做联网搜索与基础对话时可跳过本步。
+`catalog-service` 需早于 `order-service` 与 `inventory-service`，`gateway` 最后起；Nacos 控制台在 http://localhost:8848/nacos。仅做联网搜索与基础对话时可跳过本步。
 
 ### 4. 启动 MongoDB
 
@@ -554,7 +561,7 @@ npm run dev
 ## 启动顺序总结
 
 ```
-ERP 微服务集群（registry:8761 → catalog:8082 / order:8083 / inventory:8084 → gateway:8081）
+ERP 微服务集群（Nacos:8848 → auth:8086 → catalog:8082 / order:8083 / inventory:8084 / report:8085 → gateway:8081）
   → MongoDB → Docker 沙箱 → MCP Server(:9000) → Backend API(:8000) → Frontend(:3000)
 ```
 
@@ -606,7 +613,7 @@ Agent 不直接调用 ERP API，而是通过 MCP Server 提供的 23 个标准�
 WARM 摘要在每次模型调用前刷新，最多 4000 字符；更早的任务与程序记忆由 `read_memory` 按需检索，采用 BM25、时间衰减、引用频次和置信度加权。默认偏好抽取使用规则，不额外调用 LLM；开启 `MEMORY_LLM_EXTRACTION` 后会增加模型调用成本。尚未测量真实任务的 token 节省比例。
 
 ### 13. 内置 Spring Cloud 微服务 ERP
-`backend/` 为 11 个 Maven 模块：`common-core`（响应体、错误码、分页、跨服务 DTO）、`common-web`（全局异常）、`common-data`（MyBatis-Plus 分页与乐观锁）、`common-cache`（缓存、锁、幂等）、`common-feign`（Feign 拦截与降级）、`common-security`（JWT 与权限注解）六个基础库，加上注册中心（Eureka）、网关（Spring Cloud Gateway）与供应商零部件、订单、库存三个业务服务；网关保持 `:8081` 与 `/api/**` 不变，因此 MCP 网关的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均不需要改动。跨服务读取由 OpenFeign 批量装配零件信息，写事务留在单服务本地，未引入分布式事务。
+`backend/` 为 12 个 Maven 模块：`common-core`（响应体、错误码、分页、跨服务 DTO）、`common-web`（全局异常 9 分支）、`common-data`（审计字段、逻辑删除、乐观锁、慢 SQL 拦截）、`common-cache`（缓存/锁双实现与幂等）、`common-feign`（Feign 拦截与降级）、`common-security`（JWT 与权限注解）六个基础库，加上网关、认证、供应商零部件、订单、库存、报表六个服务；注册与配置走 Nacos，网关保持 `:8081` 与 `/api/**` 不变，MCP 侧的 `ERP_BASE_URL` 与 23 个工具定义不变，仅新增服务账号 token 注入。鉴权采用网关与服务双层 JWT 校验，跨服务一致性用 Outbox 补偿。
 
 ---
 

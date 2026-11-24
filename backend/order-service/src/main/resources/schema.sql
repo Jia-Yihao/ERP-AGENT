@@ -5,8 +5,14 @@ CREATE TABLE IF NOT EXISTS purchase_order (
   status TINYINT DEFAULT 0,
   remark VARCHAR(512),
   order_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
 );
+
 
 CREATE TABLE IF NOT EXISTS purchase_order_detail (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -14,5 +20,93 @@ CREATE TABLE IF NOT EXISTS purchase_order_detail (
   part_id BIGINT NOT NULL,
   quantity INT NOT NULL,
   unit_price DECIMAL(12,2) NOT NULL,
-  remark VARCHAR(256)
+  remark VARCHAR(256),
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS purchase_requisition (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  requisition_no VARCHAR(64) NOT NULL UNIQUE,
+  part_id BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  reason VARCHAR(512),
+  applicant VARCHAR(64),
+  status TINYINT DEFAULT 0,
+  approver VARCHAR(64),
+  approved_at DATETIME,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS requisition_approval (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  requisition_id BIGINT NOT NULL,
+  approver VARCHAR(64),
+  action VARCHAR(16),
+  comment VARCHAR(512),
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS purchase_receive (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  receive_no VARCHAR(64) NOT NULL UNIQUE,
+  order_id BIGINT NOT NULL,
+  part_id BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  receiver VARCHAR(64),
+  received_at DATETIME,
+  status TINYINT DEFAULT 1,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS order_status_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  order_id BIGINT NOT NULL,
+  from_status TINYINT,
+  to_status TINYINT,
+  operator VARCHAR(64),
+  remark VARCHAR(512),
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS outbox_event (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  aggregate_type VARCHAR(64),
+  aggregate_id VARCHAR(64),
+  event_type VARCHAR(64),
+  payload VARCHAR(2048),
+  status TINYINT DEFAULT 0,
+  retry_count INT DEFAULT 0,
+  next_retry_at DATETIME,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(64),
+  update_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0
+);
+

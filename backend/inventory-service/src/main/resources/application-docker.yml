@@ -1,0 +1,11 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        register-enabled: true
+        server-addr: '${NACOS_SERVER_ADDR:nacos:8848}'
+  autoconfigure:
+    exclude: ""
+erp:
+  cache:
+    type: '${ERP_CACHE_TYPE:local}'

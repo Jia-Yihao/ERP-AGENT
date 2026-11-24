@@ -3,6 +3,26 @@ server:
 spring:
   application:
     name: catalog-service
+
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+      discovery:
+        namespace: '${NACOS_NAMESPACE:public}'
+        register-enabled: '${NACOS_REGISTER_ENABLED:false}'
+        fail-fast: false
+      config:
+        namespace: '${NACOS_NAMESPACE:public}'
+        file-extension: yml
+        refresh-enabled: true
+        import-check:
+          enabled: false
+  config:
+    import: 'optional:nacos:${spring.application.name}.yml'
+  autoconfigure:
+    exclude: '${SPRING_AUTOCONFIGURE_EXCLUDE:org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration}'
   datasource:
     url: '${DB_URL:jdbc:h2:mem:catalog;MODE=MySQL;DB_CLOSE_DELAY=-1}'
     driver-class-name: '${DB_DRIVER:org.h2.Driver}'
@@ -20,7 +40,41 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: auto
-eureka:
-  client:
-    service-url:
-      defaultZone: '${EUREKA_URL:http://localhost:8761/eureka/}'
+erp:
+  slow-sql:
+    threshold-ms: 200
+
+  security:
+    enabled: '${ERP_SECURITY_ENABLED:true}'
+    permit-all:
+      - /actuator/health/**
+      - /v3/api-docs/**
+      - /swagger-ui/**
+      - /internal/**
+  jwt:
+    secret: '${ERP_JWT_SECRET:erp-local-development-secret-key-32bytes-minimum}'
+    access-ttl-seconds: 7200
+    refresh-ttl-seconds: 604800
+
+management:
+  health:
+    nacos-discovery:
+      enabled: false
+    nacos-config:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: '${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}'
+  metrics:
+    tags:
+      application: '${spring.application.name}'

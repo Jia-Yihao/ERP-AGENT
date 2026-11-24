@@ -1,15 +1,20 @@
 package com.example.erp.catalog.controller;
 
+import com.example.erp.catalog.dto.PartCreateDTO;
+import com.example.erp.catalog.convert.CatalogConvert;
 import com.example.erp.catalog.entity.Part;
 import com.example.erp.catalog.service.PartService;
 import com.example.erp.common.core.PageResult;
 import com.example.erp.common.core.R;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
+@Validated
 @RequestMapping("/api/parts")
 @RequiredArgsConstructor
 public class PartController {
@@ -38,7 +43,7 @@ public class PartController {
     }
 
     @PostMapping("/create")
-    public R<Part> create(@RequestBody Part body) {
-        return R.ok(service.create(body));
+    public R<Part> create(@Valid @RequestBody PartCreateDTO body) {
+        return R.ok(service.create(CatalogConvert.INSTANCE.toPart(body)));
     }
 }

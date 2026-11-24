@@ -2,6 +2,7 @@ package com.example.erp.order.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.example.erp.common.cache.Idempotent;
 import com.example.erp.common.core.BizException;
 import com.example.erp.common.core.Dtos;
 import com.example.erp.common.core.PageResult;
@@ -30,7 +31,9 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderDetailMapper detailMapper;
     private final CatalogClient catalogClient;
+    private final OrderStateMachine stateMachine;
 
+    @Idempotent(value = "order:create", ttlSeconds = 300)
     @Transactional
     public PurchaseOrder create(PurchaseOrder body) {
         validate(body);
@@ -107,18 +110,23 @@ public class OrderService {
     }
 
     public Map<String, Object> statistics(String startDate, String endDate) {
-        List<PurchaseOrder> orders = orderMapper.selectList(new LambdaQueryWrapper<PurchaseOrder>()
-                .ge(toStart(startDate) != null, PurchaseOrder::getOrderTime, toStart(startDate))
-                .le(toEnd(endDate) != null, PurchaseOrder::getOrderTime, toEnd(endDate)));
-        Map<Integer, Long> grouped = orders.stream().collect(Collectors.groupingBy(
-                o -> o.getStatus() == null ? 0 : o.getStatus(), Collectors.counting()));
+        List<Map<String, Object>> rows = orderMapper.selectStatistics(toStart(startDate), toEnd(endDate));
         Map<String, Object> statusCounts = new LinkedHashMap<>();
-        for (int i = 0; i <= 4; i++) statusCounts.put(String.valueOf(i), grouped.getOrDefault(i, 0L));
-        BigDecimal totalAmount = orders.stream()
-                .map(o -> o.getTotalAmount() == null ? BigDecimal.ZERO : o.getTotalAmount())
+        for (int i = 0; i <= 4; i++) statusCounts.put(String.valueOf(i), 0L);
+        BigDecimal totalAmount = orderMapper.selectList(new LambdaQueryWrapper<PurchaseOrder>()
+                .ge(toStart(startDate) != null, PurchaseOrder::getOrderTime, toStart(startDate))
+                .le(toEnd(endDate) != null, PurchaseOrder::getOrderTime, toEnd(endDate)))
+                .stream().map(o -> o.getTotalAmount() == null ? BigDecimal.ZERO : o.getTotalAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long totalOrders = 0;
+        for (Map<String, Object> row : rows) {
+            int status = ((Number) row.get("status")).intValue();
+            long cnt = ((Number) row.get("cnt")).longValue();
+            statusCounts.put(String.valueOf(status), cnt);
+            totalOrders += cnt;
+        }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("totalOrders", orders.size());
+        result.put("totalOrders", totalOrders);
         result.put("totalAmount", totalAmount);
         result.put("statusCounts", statusCounts);
         result.put("partCount", detailMapper.selectCount(null));
@@ -129,6 +137,7 @@ public class OrderService {
     public PurchaseOrder updateStatus(Long id, Integer status) {
         if (status == null) throw new BizException(400, "status 必填");
         PurchaseOrder o = get(id);
+        stateMachine.assertTransition(o.getStatus(), status);
         o.setStatus(status);
         orderMapper.updateById(o);
         return get(id);

@@ -1,0 +1,33 @@
+server:
+  port: 8085
+spring:
+  application:
+    name: report-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+      discovery:
+        namespace: '${NACOS_NAMESPACE:public}'
+      config:
+        namespace: '${NACOS_NAMESPACE:public}'
+        file-extension: yml
+        refresh-enabled: true
+        import-check:
+          enabled: false
+  config:
+    import: 'optional:nacos:${spring.application.name}.yml'
+management:
+  health:
+    nacos-discovery:
+      enabled: false
+    nacos-config:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always

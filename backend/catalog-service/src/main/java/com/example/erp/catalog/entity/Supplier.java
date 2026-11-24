@@ -1,12 +1,12 @@
 package com.example.erp.catalog.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.example.erp.common.data.BaseEntity;
 import lombok.Data;
 
 @Data
 @TableName("supplier")
-public class Supplier {
-    private Long id;
+public class Supplier extends BaseEntity {
     private String supplierCode;
     private String name;
     private String contactPerson;

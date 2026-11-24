@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.erp.catalog.mapper.SupplierQuoteMapper">
+
+    <select id="selectActiveByPart" resultType="com.example.erp.catalog.entity.SupplierQuote">
+        SELECT id, supplier_id, part_id, unit_price, lead_days, valid_from, valid_to, status,
+               create_time, update_time, create_by, update_by, version
+        FROM supplier_quote
+        WHERE deleted = 0
+          AND part_id = #{partId}
+          AND status = 1
+          AND valid_from &lt;= CURDATE()
+          AND valid_to &gt;= CURDATE()
+        ORDER BY unit_price ASC, lead_days ASC, id ASC
+    </select>
+</mapper>

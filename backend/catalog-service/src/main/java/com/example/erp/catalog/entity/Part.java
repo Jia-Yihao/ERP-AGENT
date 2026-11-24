@@ -1,14 +1,14 @@
 package com.example.erp.catalog.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.example.erp.common.data.BaseEntity;
 import lombok.Data;
 
 import java.math.BigDecimal;
 
 @Data
 @TableName("part")
-public class Part {
-    private Long id;
+public class Part extends BaseEntity {
     private String partCode;
     private String name;
     private String model;

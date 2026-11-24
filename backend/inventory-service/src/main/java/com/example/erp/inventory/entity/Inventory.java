@@ -3,12 +3,12 @@ package com.example.erp.inventory.entity;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.example.erp.common.core.Dtos;
+import com.example.erp.common.data.BaseEntity;
 import lombok.Data;
 
 @Data
 @TableName("inventory")
-public class Inventory {
-    private Long id;
+public class Inventory extends BaseEntity {
     private Long partId;
     private Integer currentQuantity;
     private Integer safetyStock;

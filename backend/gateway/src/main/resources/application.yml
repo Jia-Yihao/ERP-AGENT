@@ -4,6 +4,18 @@ spring:
   application:
     name: gateway-service
   cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+      discovery:
+        namespace: '${NACOS_NAMESPACE:public}'
+      config:
+        namespace: '${NACOS_NAMESPACE:public}'
+        file-extension: yml
+        refresh-enabled: true
+        import-check:
+          enabled: false
     gateway:
       discovery:
         locator:
@@ -21,7 +33,60 @@ spring:
           uri: lb://inventory-service
           predicates:
             - Path=/api/inventory/**
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+        - id: auth-route
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+erp:
+  security:
+    enabled: '${ERP_SECURITY_ENABLED:true}'
+  jwt:
+    secret: '${ERP_JWT_SECRET:erp-local-development-secret-key-32bytes-minimum}'
+  ratelimit:
+    capacity: 30
+    refill-per-second: 10
+  cache:
+    type: local
+spring:
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
+      discovery:
+        namespace: '${NACOS_NAMESPACE:public}'
+      config:
+        namespace: '${NACOS_NAMESPACE:public}'
+        file-extension: yml
+        refresh-enabled: true
+        import-check:
+          enabled: false
+    gateway:
+      default-filters:
+        - name: CircuitBreaker
+          args:
+            name: erpBackend
+            fallbackUri: forward:/fallback
+
+management:
+  health:
+    nacos-discovery:
+      enabled: false
+    nacos-config:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: '${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}'
+  metrics:
+    tags:
+      application: '${spring.application.name}'

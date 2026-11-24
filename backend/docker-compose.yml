@@ -1,0 +1,311 @@
+# ERP 云原生编排：基础设施 + 业务服务（registry/Eureka 由 Nacos 承担，其镜像见 registry/Dockerfile）
+name: erp-cloud
+
+x-app-env: &app-env
+  SPRING_PROFILES_ACTIVE: docker
+  NACOS_SERVER_ADDR: nacos:8848
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+  JAVA_OPTS: -Xms256m -Xmx512m
+  # HS256 密钥须 >=32 字节；内部调用 HMAC 未配置时一律拒绝
+  ERP_JWT_SECRET: ${ERP_JWT_SECRET:-erp-cloud-dev-jwt-secret-change-me-32bytes}
+  ERP_INTERNAL_SECRET: ${ERP_INTERNAL_SECRET:-erp-cloud-dev-internal-secret-change-me}
+
+x-db-env: &db-env
+  DB_DRIVER: com.mysql.cj.jdbc.Driver
+  DB_USER: root
+  DB_PASS: ${MYSQL_ROOT_PASSWORD:-root123456}
+
+services:
+  # ---------- 基础设施 ----------
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: erp-nacos
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      NACOS_AUTH_ENABLE: "false"
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+      - nacos-logs:/home/nacos/logs
+    networks:
+      - erp-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: erp-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - erp-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  mysql:
+    image: mysql:8.0
+    container_name: erp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: erp_catalog
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - erp-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: erp-zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - erp-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9411/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: erp-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - erp-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: erp-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/erp-dashboard.json
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - erp-net
+    depends_on:
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # ---------- 业务服务 ----------
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    image: erp/gateway:1.0.0
+    container_name: erp-gateway
+    environment:
+      <<: *app-env
+    ports:
+      - "8081:8081"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  catalog:
+    build:
+      context: .
+      dockerfile: catalog-service/Dockerfile
+    image: erp/catalog:1.0.0
+    container_name: erp-catalog
+    environment:
+      <<: [*app-env, *db-env]
+      DB_URL: jdbc:mysql://mysql:3306/erp_catalog?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    ports:
+      - "8082:8082"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  order:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    image: erp/order:1.0.0
+    container_name: erp-order
+    environment:
+      <<: [*app-env, *db-env]
+      DB_URL: jdbc:mysql://mysql:3306/erp_order?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    ports:
+      - "8083:8083"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  inventory:
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+    image: erp/inventory:1.0.0
+    container_name: erp-inventory
+    environment:
+      <<: [*app-env, *db-env]
+      DB_URL: jdbc:mysql://mysql:3306/erp_inventory?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    ports:
+      - "8084:8084"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  report:
+    build:
+      context: .
+      dockerfile: report-service/Dockerfile
+    image: erp/report:1.0.0
+    container_name: erp-report
+    environment:
+      <<: [*app-env, *db-env]
+      DB_URL: jdbc:mysql://mysql:3306/erp_catalog?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    ports:
+      - "8085:8085"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  auth:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    image: erp/auth:1.0.0
+    container_name: erp-auth
+    environment:
+      <<: *app-env
+      ERP_MCP_CLIENT_SECRET: ${ERP_MCP_CLIENT_SECRET:-change-me}
+    ports:
+      - "8086:8086"
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8086/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  nacos-data:
+  nacos-logs:
+  redis-data:
+  mysql-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  erp-net:
+    driver: bridge

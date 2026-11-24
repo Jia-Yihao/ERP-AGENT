@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.erp.inventory.mapper.InventoryMapper">
+    <select id="selectPageWithPart" resultType="com.example.erp.inventory.entity.Inventory">
+        SELECT i.* FROM inventory i
+        WHERE i.deleted = 0
+        <if test="warehouseLocation != null and warehouseLocation != ''">
+            AND i.warehouse_location LIKE CONCAT('%', #{warehouseLocation}, '%')
+        </if>
+        <if test="partName != null and partName != ''">
+            AND EXISTS (
+                SELECT 1 FROM part_snapshot p
+                WHERE p.id = i.part_id
+                  AND p.name LIKE CONCAT('%', #{partName}, '%')
+            )
+        </if>
+        ORDER BY i.id
+    </select>
+    <update id="deductStock">
+        UPDATE inventory
+        SET current_quantity = current_quantity - #{quantity}, version = version + 1
+        WHERE id = #{id} AND deleted = 0 AND current_quantity &gt;= #{quantity}
+    </update>
+</mapper>

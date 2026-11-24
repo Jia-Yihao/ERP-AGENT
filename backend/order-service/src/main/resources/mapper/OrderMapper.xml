@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.erp.order.mapper.OrderMapper">
+    <select id="selectStatistics" resultType="java.util.LinkedHashMap">
+        SELECT status, COUNT(*) AS cnt
+        FROM purchase_order
+        WHERE deleted = 0
+        <if test="start != null">AND order_time &gt;= #{start}</if>
+        <if test="end != null">AND order_time &lt;= #{end}</if>
+        GROUP BY status
+    </select>
+</mapper>

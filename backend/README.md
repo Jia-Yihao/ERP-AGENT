@@ -4,21 +4,24 @@
 
 ## 架构
 
+12 个 Maven 模块：六个基础库 + 六个可部署服务。
+
 | 模块 | 端口 | 职责 |
 |---|---|---|
-| `erp-common-core` | — | 统一响应 `R`、分页 `PageResult`、错误码 `ErrorCode`、业务异常、共享常量、跨服务 DTO |
-| `erp-common-web` | — | 全局异常处理，统一 HTTP 200 + 错误码出口 |
-| `erp-common-data` | — | MyBatis-Plus 插件：分页（`size` 上限 100）、乐观锁 |
-| `erp-common-cache` | — | 缓存双实现、分布式锁、幂等切面的基础库 |
+| `erp-common-core` | — | 统一响应 `R`、分页 `PageResult`、错误码 `ErrorCode`、业务异常、用户上下文、跨服务 DTO |
+| `erp-common-web` | — | 全局异常处理（9 分支）、OpenAPI 配置 |
+| `erp-common-data` | — | `BaseEntity` 审计字段与逻辑删除、乐观锁、分页（`size` ≤ 100）、防全表更新、慢 SQL 拦截 |
+| `erp-common-cache` | — | `CacheService` / `LockService` 双实现（Redis / Caffeine 本地）、AOP 幂等 |
 | `erp-common-feign` | — | Feign 拦截、错误解码、降级、内部调用签名的基础库 |
-| `erp-common-security` | — | JWT 签发解析、SecurityFilterChain 模板、权限注解的基础库 |
-| `registry` | 8761 | Eureka Server，服务注册与发现 |
-| `gateway` | 8081 | Spring Cloud Gateway，对外唯一入口，按路径路由到三个业务服务 |
-| `catalog-service` | 8082 | 供应商 5 条 + 零部件 5 条接口，`/internal/parts/batch` 供服务间调用 |
-| `order-service` | 8083 | 采购订单 7 条接口 |
-| `inventory-service` | 8084 | 库存 6 条接口 |
+| `erp-common-security` | — | JWT 签发解析、SecurityFilterChain、JwtAuthenticationFilter、权限注解、内部签名校验 |
+| `gateway` | 8081 | Spring Cloud Gateway：TraceId / CORS / 访问日志 / 限流 / JWT 校验 / 错误改写，四条 `lb://` 路由 |
+| `auth-service` | 8086 | 登录、服务账号换 token、刷新、当前用户、登出；六张权限表 |
+| `catalog-service` | 8082 | 供应商 5 + 零部件 5 + 报价比价 3 + 供应商绩效 2；`/internal/parts/batch` |
+| `order-service` | 8083 | 订单 7 + 采购申请 5 + 收货 2 + Outbox 2；状态机与状态流水 |
+| `inventory-service` | 8084 | 库存 6；Lua 条件原子扣减 + 本地锁降级 |
+| `report-service` | 8085 | 报表聚合，Feign 汇总订单与库存统计 |
 
-业务服务依赖 `erp-common-web` 与 `erp-common-data`，网关只依赖 `erp-common-core`（不引入 Spring MVC，避免与 WebFlux 冲突）。
+注册与配置统一由外部 Nacos `:8848` 提供，`registry` 模块已移除。业务服务依赖 `erp-common-web` / `erp-common-data` / `erp-common-cache` / `erp-common-security`，网关只依赖 `erp-common-core`（不引入 Spring MVC，避免与 WebFlux 冲突）。
 
 Gateway 只路由 `/api/**`，`/internal/**` 不对外暴露。订单明细的 `partName / supplierName` 与库存 VO 的嵌套 `partDetail` 由 OpenFeign 调用 `catalog-service` 批量组装，一次请求取回全部零件信息，避免逐条 N+1 调用。
 
@@ -26,7 +29,7 @@ Gateway 只路由 `/api/**`，`/internal/**` 不对外暴露。订单明细的 `
 
 ## 技术栈
 
-Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5（Leyton）、Spring Cloud Gateway、Netflix Eureka、OpenFeign + LoadBalancer、MyBatis-Plus 3.5.9（`mybatis-plus-spring-boot3-starter` + `mybatis-plus-jsqlparser`，分页上限 100、乐观锁插件）、H2（默认）/ MySQL 8（可选）、Maven 3.9。父 POM 统一管理 MapStruct、springdoc、jjwt、p6spy、Testcontainers、JaCoCo 版本，编译期挂 Lombok 与 MapStruct 注解处理器。
+Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2（Nacos 注册与配置）、Spring Cloud Gateway、OpenFeign + LoadBalancer + Resilience4j、Spring Security 6 + jjwt 0.12.5（HS256 双层校验）、MyBatis-Plus 3.5.9（分页上限 100、乐观锁、逻辑删除、防全表更新）、MapStruct 1.5.5、Redis（Lettuce）/ Caffeine 双实现、H2（默认）/ MySQL 8、Actuator + Micrometer + Prometheus + Zipkin、Maven 3.9。父 POM 统一版本与插件管理，编译期挂 Lombok 与 MapStruct 注解处理器。
 
 Spring Cloud 2023.0.x 已结束开源支持。本工程用于微服务架构实践与本地验收，生产部署需升级到受支持的 Spring Boot / Spring Cloud release train。
 
@@ -39,19 +42,20 @@ cd backend
 mvn -B -q -DskipTests clean package
 ```
 
-按下列顺序启动，每个服务一个终端：
+启动 Nacos `:8848`（`docker compose up -d nacos`）后，按下列顺序启动各服务，每个服务一个终端：
 
 ```bash
-java -jar registry/target/erp-registry-1.0.0.jar --server.port=8761
+java -jar auth-service/target/erp-auth-service-1.0.0.jar --server.port=8086
 java -jar catalog-service/target/erp-catalog-service-1.0.0.jar --server.port=8082
 java -jar order-service/target/erp-order-service-1.0.0.jar --server.port=8083
 java -jar inventory-service/target/erp-inventory-service-1.0.0.jar --server.port=8084
+java -jar report-service/target/erp-report-service-1.0.0.jar --server.port=8085
 java -jar gateway/target/erp-gateway-1.0.0.jar --server.port=8081
 ```
 
 启动命令显式写出 `--server.port`。部分终端会注入 `SERVER__PORT` 环境变量，Spring Boot 的松弛绑定会用它覆盖 `application.yml` 中的端口，导致服务绑定到随机高位端口而启动失败；命令行参数优先级最高，可避免这种覆盖。带 HTTP 代理的终端执行 curl 时需加 `--noproxy '*'`。
 
-完整链路：`registry(:8761) → catalog(:8082) → order(:8083) / inventory(:8084) → gateway(:8081) → MCP(:9000) → FastAPI(:8000) → 前端(:3000)`。`catalog-service` 需先于 `order-service` 与 `inventory-service` 就绪，否则 Feign 调用无可用实例。
+完整链路：`Nacos(:8848) → auth(:8086) → catalog(:8082) → order(:8083) / inventory(:8084) / report(:8085) → gateway(:8081) → MCP(:9000) → FastAPI(:8000) → 前端(:3000)`。`catalog-service` 需先于 `order-service` 与 `inventory-service` 就绪，否则 Feign 调用无可用实例；Nacos 未启动时各服务以 `optional:nacos:` 回退本地配置，注册动作失败但不阻断启动。
 
 启动后可直接冒烟：
 
@@ -92,7 +96,7 @@ curl "http://localhost:8081/api/inventory/check"
 
 ## 验收清单
 
-- [x] 11 个模块 `mvn -DskipTests clean package` 构建通过，产出 5 个可执行 fat jar 与 6 个公共库 jar
+- [x] 12 个模块 `mvn -DskipTests clean package` 构建通过，产出 6 个可执行 fat jar 与 6 个公共库 jar
 - [ ] Eureka 控制台 `http://localhost:8761` 可见 4 个注册实例
 - [ ] 23 条接口经 `:8081` 返回 HTTP 200 且 `code=200`
 - [ ] `orders/get/{id}` 返回 `orderDetail[]`，`orders/search-details` 带 `partName / supplierName`
@@ -110,4 +114,4 @@ curl "http://localhost:8081/api/inventory/check"
 
 ## 边界
 
-本工程覆盖供应商、零部件、采购订单、库存四个采购域，不含财务、销售、生产、权限体系与多租户。网关与业务服务均未启用鉴权，MCP 网关本身也无鉴权；需要时加 `X-ERP-Token` 拦截器并同步修改 `http_base.py` 的 headers。未引入 Config Server、消息总线、链路追踪、限流熔断与分布式事务。收货自动入库不在 23 条契约内，若需补充要同时扩展 MCP 工具定义。
+本工程覆盖供应商、零部件、采购订单、库存四个采购域，并补齐报价比价、供应商绩效、采购申请与审批、收货、订单状态机、Outbox 补偿与报表聚合。鉴权为网关与服务双层 JWT 校验，MCP 侧以服务账号换取 token；`ERP_SECURITY_ENABLED=false` 仅用于本地排障。注册与配置走 Nacos，Redis 与 MySQL 为可选增强，缺省以本地实现与 H2 运行。跨服务一致性用 Outbox 补偿，收货入库事件由定时任务扫描发送，不引入分布式事务组件。

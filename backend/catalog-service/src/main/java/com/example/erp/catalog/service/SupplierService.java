@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.erp.catalog.entity.Supplier;
 import com.example.erp.catalog.mapper.SupplierMapper;
+import com.example.erp.common.cache.CacheService;
 import com.example.erp.common.core.BizException;
 import com.example.erp.common.core.PageResult;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SupplierService {
     private final SupplierMapper mapper;
+    private final CacheService cache;
 
     public List<Supplier> search(String name) {
         return mapper.selectList(new LambdaQueryWrapper<Supplier>()
@@ -33,8 +35,11 @@ public class SupplierService {
     }
 
     public Supplier get(Long id) {
+        Supplier cached = cache.get("erp:cache:supplier:" + id, Supplier.class).orElse(null);
+        if (cached != null) return cached;
         Supplier s = mapper.selectById(id);
         if (s == null) throw new BizException(404, "供应商不存在");
+        cache.put("erp:cache:supplier:" + id, s, java.time.Duration.ofMinutes(5));
         return s;
     }
 

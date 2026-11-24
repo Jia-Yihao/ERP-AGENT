@@ -1,6 +1,7 @@
 package com.example.erp.inventory.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.erp.common.core.BizException;
 import com.example.erp.common.core.Dtos;
 import com.example.erp.common.core.PageResult;
@@ -9,6 +10,7 @@ import com.example.erp.inventory.entity.Inventory;
 import com.example.erp.inventory.entity.InventoryLog;
 import com.example.erp.inventory.mapper.InventoryLogMapper;
 import com.example.erp.inventory.mapper.InventoryMapper;
+import com.example.erp.common.cache.LockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class InventoryService {
     private final InventoryMapper mapper;
     private final InventoryLogMapper logMapper;
     private final CatalogClient catalogClient;
+    private final LockService lockService;
 
     public List<Inventory> warning() {
         List<Inventory> list = mapper.selectList(new LambdaQueryWrapper<Inventory>()
@@ -35,25 +38,10 @@ public class InventoryService {
     }
 
     public PageResult<Inventory> page(long current, long size, String partName, String warehouseLocation) {
-        List<Inventory> all = mapper.selectList(null);
-        Map<Long, Dtos.PartBrief> briefs = briefMap(all);
-        List<Inventory> filtered = all.stream().filter(inv -> {
-            if (StringUtils.hasText(warehouseLocation)
-                    && (inv.getWarehouseLocation() == null
-                    || !inv.getWarehouseLocation().contains(warehouseLocation))) return false;
-            if (StringUtils.hasText(partName)) {
-                Dtos.PartBrief b = briefs.get(inv.getPartId());
-                if (b == null || b.getName() == null || !b.getName().contains(partName)) return false;
-            }
-            return true;
-        }).toList();
-        long total = filtered.size();
-        long from = Math.max(0, Math.min((current - 1) * size, total));
-        long to = Math.min(from + size, total);
-        List<Inventory> records = new ArrayList<>(filtered.subList((int) from, (int) to));
-        withParts(records);
-        long pages = size == 0 ? 0 : (total + size - 1) / size;
-        return new PageResult<>(records, total, current, size, pages);
+        Page<Inventory> page = new Page<>(current, size);
+        mapper.selectPageWithPart(page, partName, warehouseLocation);
+        withParts(page.getRecords());
+        return new PageResult<>(page.getRecords(), page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
     }
 
     public Map<String, Object> check() {
@@ -95,13 +83,19 @@ public class InventoryService {
         if (partId == null || quantity == null || quantity <= 0) {
             throw new BizException(400, "partId 必填且出库数量必须大于 0");
         }
-        Inventory inv = getOrCreate(partId);
-        int before = inv.getCurrentQuantity();
-        if (before < quantity) throw new BizException(409, "库存不足");
-        inv.setCurrentQuantity(before - quantity);
-        mapper.updateById(inv);
-        writeLog(partId, "OUTBOUND", quantity, before, inv.getCurrentQuantity());
-        return withOne(inv);
+        String lockKey = "erp:lock:stock:" + partId;
+        Inventory result = lockService.withLock(lockKey, java.time.Duration.ofSeconds(5), () -> {
+            Inventory inv = getOrCreate(partId);
+            int before = inv.getCurrentQuantity();
+            if (mapper.deductStock(inv.getId(), quantity) == 0) {
+                throw new BizException(409, "库存不足");
+            }
+            writeLog(partId, "OUTBOUND", quantity, before, before - quantity);
+            inv.setCurrentQuantity(before - quantity);
+            return inv;
+        });
+        if (result == null) throw new BizException(409, "库存操作繁忙，请重试");
+        return withOne(result);
     }
 
     public Inventory get(Long id) {

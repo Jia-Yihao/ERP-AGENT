@@ -5,12 +5,16 @@ import com.example.erp.common.core.R;
 import com.example.erp.inventory.entity.Inventory;
 import com.example.erp.inventory.service.InventoryService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
 @RestController
+@Validated
 @RequestMapping("/api/inventory")
 @RequiredArgsConstructor
 public class InventoryController {
@@ -35,12 +39,12 @@ public class InventoryController {
 
     /** MCP 侧用 erp_client.post(path, params=...)，参数在 query string 上，不能使用 @RequestBody。 */
     @PostMapping("/inbound")
-    public R<Inventory> inbound(Long partId, Integer quantity, String warehouseLocation) {
+    public R<Inventory> inbound(@NotNull(message = "partId 不能为空") Long partId, @NotNull(message = "quantity 不能为空") @Min(value = 1, message = "quantity 必须大于 0") Integer quantity, String warehouseLocation) {
         return R.ok(service.inbound(partId, quantity, warehouseLocation));
     }
 
     @PostMapping("/outbound")
-    public R<Inventory> outbound(Long partId, Integer quantity) {
+    public R<Inventory> outbound(@NotNull(message = "partId 不能为空") Long partId, @NotNull(message = "quantity 不能为空") @Min(value = 1, message = "quantity 必须大于 0") Integer quantity) {
         return R.ok(service.outbound(partId, quantity));
     }
 
