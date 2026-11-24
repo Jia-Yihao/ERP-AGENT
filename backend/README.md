@@ -21,7 +21,7 @@
 | `inventory-service` | 8084 | 库存 6；Lua 条件原子扣减 + 本地锁降级 |
 | `report-service` | 8085 | 报表聚合，Feign 汇总订单与库存统计 |
 
-注册与配置统一由外部 Nacos `:8848` 提供，`registry` 模块已移除。业务服务依赖 `erp-common-web` / `erp-common-data` / `erp-common-cache` / `erp-common-security`，网关只依赖 `erp-common-core`（不引入 Spring MVC，避免与 WebFlux 冲突）。
+注册与配置由 Nacos `:8848` 提供，`registry` 模块已移除。Nacos 不是本地启动的前置条件：`NACOS_DISCOVERY_ENABLED=false` 时不加载 Nacos 发现客户端，`lb://` 由 `SimpleDiscoveryClient` 的静态实例解析；`application-docker.yml` 反向打开 Nacos 发现与注册并排除两个静态发现自动配置。业务服务依赖 `erp-common-web` / `erp-common-data` / `erp-common-cache` / `erp-common-security`，网关只依赖 `erp-common-core`（不引入 Spring MVC，避免与 WebFlux 冲突）。
 
 Gateway 只路由 `/api/**`，`/internal/**` 不对外暴露。订单明细的 `partName / supplierName` 与库存 VO 的嵌套 `partDetail` 由 OpenFeign 调用 `catalog-service` 批量组装，一次请求取回全部零件信息，避免逐条 N+1 调用。
 
@@ -52,9 +52,11 @@ cd backend
 mvn -B -q -DskipTests clean package
 ```
 
-启动 Nacos `:8848`（`docker compose up -d nacos`）后，按下列顺序启动各服务，每个服务一个终端：
+默认不依赖外部中间件即可启动：Nacos 发现与注册均关闭（`NACOS_DISCOVERY_ENABLED=false`、`NACOS_REGISTER_ENABLED=false`），`lb://` 由静态实例解析，数据库为 H2 内存库，缓存与锁走 Caffeine / 本地实现。六个进程需共用同一个 `ERP_INTERNAL_SECRET`，否则 `/internal/**` 的签名校验不通过；不设置时该层不启用。按下列顺序启动，每个服务一个终端：
 
 ```bash
+cd backend                                     # 每个终端分别进入该目录
+export ERP_INTERNAL_SECRET=dev-internal-secret # 六个终端保持一致，不设置则签名层不启用
 java -jar auth-service/target/erp-auth-service-1.0.0.jar --server.port=8086
 java -jar catalog-service/target/erp-catalog-service-1.0.0.jar --server.port=8082
 java -jar order-service/target/erp-order-service-1.0.0.jar --server.port=8083
@@ -63,19 +65,27 @@ java -jar report-service/target/erp-report-service-1.0.0.jar --server.port=8085
 java -jar gateway/target/erp-gateway-1.0.0.jar --server.port=8081
 ```
 
+需要真实注册发现、Sentinel 规则下发、Seata 事务或 MySQL/Redis 时，先 `docker compose up -d` 拉起 15 个容器，再给每个服务加 `--spring.profiles.active=docker`；该 profile 打开 Nacos 发现与注册、排除静态发现自动配置、缓存切 `redis`，catalog/order/inventory 打开 Seata。
+
 启动命令显式写出 `--server.port`。部分终端会注入 `SERVER__PORT` 环境变量，Spring Boot 的松弛绑定会用它覆盖 `application.yml` 中的端口，导致服务绑定到随机高位端口而启动失败；命令行参数优先级最高，可避免这种覆盖。带 HTTP 代理的终端执行 curl 时需加 `--noproxy '*'`。
 
-完整链路：`Nacos(:8848) → auth(:8086) → catalog(:8082) → order(:8083) / inventory(:8084) / report(:8085) → gateway(:8081) → MCP(:9000) → FastAPI(:8000) → 前端(:3000)`。`catalog-service` 需先于 `order-service` 与 `inventory-service` 就绪，否则 Feign 调用无可用实例；Nacos 未启动时各服务以 `optional:nacos:` 回退本地配置，注册动作失败但不阻断启动。
+完整链路：`auth(:8086) → catalog(:8082) → order(:8083) / inventory(:8084) / report(:8085) → gateway(:8081) → MCP(:9000) → FastAPI(:8000) → 前端(:3000)`，需要真实注册与配置下发时在链路最前面加 Nacos(:8848)。`catalog-service` 需先于 `order-service` 与 `inventory-service` 就绪，否则 Feign 调用无可用实例。发现与注册默认关闭，Nacos 不在时本地链路不受影响；以 docker profile 启动时才依赖 Nacos 与 Redis 就绪。
 
-启动后可直接冒烟：
+网关对 `/api/**` 强制校验 JWT，冒烟先换取 token：
 
 ```bash
-curl "http://localhost:8081/api/suppliers/search?name=大众"
-curl "http://localhost:8081/api/parts/page?current=1&size=5"
-curl "http://localhost:8081/api/orders/get/1"
-curl "http://localhost:8081/api/inventory/warning"
-curl "http://localhost:8081/api/inventory/check"
+TOKEN=$(curl -s -X POST http://localhost:8081/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}' | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/suppliers/search?name=大众"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/parts/page?current=1&size=5"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/orders/statistics"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/inventory/check"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/reports/summary"
 ```
+
+不带 token 时返回 HTTP 200 与 `code=401`，这是本工程的统一约定：业务错误不占用 HTTP 状态码。
 
 ## 数据
 

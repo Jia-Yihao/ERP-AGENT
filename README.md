@@ -123,8 +123,8 @@ TYPESAFE_MODEL=jev-1.13.0
 | **可观测性** | Langfuse（可选，默认关闭） | 元数据追踪、Token 用量与验收评分；不采集对话正文 |
 | **Agent 框架** | DeepAgent + LangGraph | 状态图引擎，支持中断/恢复/子Agent |
 | **MCP 协议** | FastMCP + SSE | Agent ↔ ERP 的工具桥接层，把 23 个工具转发到 `ERP_BASE_URL` |
-| **ERP 后端** | Java 17 + Spring Boot 3.2.5 + Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2 | Nacos 注册与配置、Gateway 网关、OpenFeign + Resilience4j、双层 JWT 校验；`backend/` 十二模块（六个基础库 + 六个服务） |
-| **ERP 持久层** | MyBatis-Plus 3.5.9 + H2 / MySQL 8 | 三个业务服务各自独立库，写事务本地 `@Transactional` |
+| **ERP 后端** | Java 17 + Spring Boot 3.2.5 + Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2 | Nacos 注册与配置、Gateway 网关（五条 `lb://` 路由 + 六个全局过滤器）、OpenFeign + Resilience4j、Sentinel 1.8.8 流控熔断、Seata 2.1.0 AT 事务、双层 JWT 校验；`backend/` 十二模块（六个基础库 + 六个服务） |
+| **ERP 持久层** | MyBatis-Plus 3.5.9 + H2 / MySQL 8 | 各服务独立库（四个业务库），写事务本地 `@Transactional`；收货入库的跨库写由 Seata AT 保证一致 |
 | **Web 框架** | FastAPI + Uvicorn | SSE 流式响应 |
 | **前端** | Next.js 16 + React 19 + TailwindCSS 4 | 流式对话 UI + 中断交互 |
 | **会话存储** | MongoDB (Motor/Pymongo) | 会话/消息/Store 持久化 |
@@ -169,14 +169,15 @@ TYPESAFE_MODEL=jev-1.13.0
                              │ HTTP REST
 ┌────────────────────────────▼────────────────────────────────────┐
 │        ERP 后端：Spring Cloud 微服务集群（backend/）               │
-│   ERP_BASE_URL → Gateway :8081   对外唯一入口，路由 /api/**        │
-│   ├─ Nacos :8848               注册中心 + 配置中心（外部服务）    │
+│   ERP_BASE_URL → Gateway :8081   对外唯一入口，五条 /api/** 路由   │
 │   ├─ auth-service :8086        登录 / 服务账号 token              │
 │   ├─ catalog-service :8082      供应商(5) + 零部件(5) + 报价绩效   │
 │   ├─ order-service :8083        订单(7) + 申请审批 + 收货 + Outbox │
 │   ├─ inventory-service :8084    库存(6) + 原子扣减                 │
 │   └─ report-service :8085       报表聚合                          │
 │   OpenFeign 跨服务装配零件信息 · 每服务独立库(H2 / MySQL 8)       │
+│   Nacos :8848 注册与配置（可选）· Sentinel :8080 规则              │
+│   Seata :8091 事务协调（可选）· Redis :6379 缓存与分布式锁         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -475,6 +476,11 @@ MONGODB_URI=mongodb://localhost:27017
 # 未启动 ERP 时 23 个业务工具不可用，联网搜索和基础对话仍可启动
 ERP_BASE_URL=http://localhost:8081
 
+# ERP 服务间签名密钥与 JWT 密钥，六个 Java 进程需一致
+# ERP_INTERNAL_SECRET 未配置时 /internal/** 的签名校验不启用
+ERP_INTERNAL_SECRET=change-me-in-production
+ERP_JWT_SECRET=erp-cloud-dev-jwt-secret-change-me-32bytes
+
 # MCP Server 地址（本地）
 MCP_SERVER_URL=http://localhost:9000
 
@@ -487,8 +493,8 @@ SANDBOX_IMAGE=python:3.11-slim
 按 `backend/README.md` 的顺序，每个服务一个终端；命令需显式带 `--server.port`，避免终端注入的 `SERVER__PORT` 覆盖配置：
 
 ```bash
-cd backend
-docker compose up -d nacos              # 需要真实注册与配置下发时才起；本地静态发现可省略
+cd backend                                    # 每个终端分别进入该目录
+export ERP_INTERNAL_SECRET=dev-internal-secret # 六个终端保持一致，不设置则签名层不启用
 java -jar auth-service/target/erp-auth-service-1.0.0.jar --server.port=8086
 java -jar catalog-service/target/erp-catalog-service-1.0.0.jar --server.port=8082
 java -jar order-service/target/erp-order-service-1.0.0.jar --server.port=8083
@@ -498,7 +504,18 @@ java -jar gateway/target/erp-gateway-1.0.0.jar --server.port=8081
 cd ..
 ```
 
-`catalog-service` 需早于 `order-service` 与 `inventory-service`，`gateway` 最后起；未起 Nacos 时各服务以静态实例解析 `lb://`，需服务间一致性校验时设置 `ERP_INTERNAL_SECRET`。Nacos 控制台在 http://localhost:8848/nacos。仅做联网搜索与基础对话时可跳过本步。
+默认配置不依赖任何外部中间件：`NACOS_DISCOVERY_ENABLED=false` 时 `lb://` 由静态实例解析，`NACOS_REGISTER_ENABLED=false` 关闭注册，数据库为 H2 内存库，缓存与锁走 Caffeine/本地实现。需要真实注册发现、Sentinel 规则下发或 Seata 全局事务时，先 `docker compose -f backend/docker-compose.yml up -d`（15 个容器，含 Nacos、Redis、MySQL、Sentinel dashboard、Seata server 与写入规则的 `nacos-seed` 任务），再以 `SPRING_PROFILES_ACTIVE=docker` 启动各服务。
+
+`catalog-service` 需早于 `order-service` 与 `inventory-service`，`gateway` 最后起。网关对 `/api/**` 强制校验 JWT，冒烟需先换 token：
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8081/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}' | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/orders/statistics"
+```
+
+仅做联网搜索与基础对话时可跳过本步。
 
 ### 4. 启动 MongoDB
 
@@ -556,12 +573,18 @@ npm run dev
 
 浏览器打开 http://localhost:3000 即可使用。
 
+### 后端验证状态
+
+六个服务在 8081–8086 的本机链路上已实测：`/actuator/health` 全部 `UP`；五条 `lb://` 路由经静态实例解析返回 `code=200`；无 token 返回 `code=401`，伪造 `X-User-Id` 不生效；服务账号换 token 后按 scope 访问业务接口；order→catalog、inventory→catalog、report→order/inventory 的 Feign 调用均取回真实数据；`/internal/**` 未签名返回 `code=401`、签名调用正常；收货入库与出库、库存扣减超量 `code=409`、请购审批与重复审批、报价比价、绩效重算、订单状态机与重复下单校验、网关限流（45 次中 9 次 `code=429`）均按预期返回。逐项结果见 `backend/README.md` 的验收清单。
+
+依赖外部中间件的链路未实机运行：Nacos 真实注册与配置下发、Sentinel 规则加载与流控触发、Seata 全局事务回滚、Docker 编排整体拉起、真实 MySQL/Redis/Zipkin，以及 MCP→FastAPI 端到端。这些链路在 `docker-compose.yml` 中已配置，需在有 Docker 的环境 `docker compose up -d` 后复测。
+
 ---
 
 ## 启动顺序总结
 
 ```
-ERP 微服务集群（Nacos:8848 → auth:8086 → catalog:8082 / order:8083 / inventory:8084 / report:8085 → gateway:8081）
+ERP 微服务集群（Nacos:8848 可选 → auth:8086 → catalog:8082 / order:8083 / inventory:8084 / report:8085 → gateway:8081）
   → MongoDB → Docker 沙箱 → MCP Server(:9000) → Backend API(:8000) → Frontend(:3000)
 ```
 
@@ -613,7 +636,7 @@ Agent 不直接调用 ERP API，而是通过 MCP Server 提供的 23 个标准�
 WARM 摘要在每次模型调用前刷新，最多 4000 字符；更早的任务与程序记忆由 `read_memory` 按需检索，采用 BM25、时间衰减、引用频次和置信度加权。默认偏好抽取使用规则，不额外调用 LLM；开启 `MEMORY_LLM_EXTRACTION` 后会增加模型调用成本。尚未测量真实任务的 token 节省比例。
 
 ### 13. 内置 Spring Cloud 微服务 ERP
-`backend/` 为 12 个 Maven 模块：`common-core`（响应体、错误码、分页、跨服务 DTO）、`common-web`（全局异常 9 分支）、`common-data`（审计字段、逻辑删除、乐观锁、慢 SQL 拦截）、`common-cache`（缓存/锁双实现与幂等）、`common-feign`（Feign 拦截与降级）、`common-security`（JWT 与权限注解）六个基础库，加上网关、认证、供应商零部件、订单、库存、报表六个服务；注册与配置走 Nacos，网关保持 `:8081` 与 `/api/**` 不变，MCP 侧的 `ERP_BASE_URL` 与 23 个工具定义不变，仅新增服务账号 token 注入。鉴权采用网关与服务双层 JWT 校验，跨服务一致性用 Outbox 补偿。
+`backend/` 为 12 个 Maven 模块：`common-core`（响应体、错误码、分页、跨服务 DTO）、`common-web`（全局异常 9 分支）、`common-data`（审计字段、逻辑删除、乐观锁、慢 SQL 拦截）、`common-cache`（Redis/Caffeine 双实现与 AOP 幂等）、`common-feign`（Feign 拦截、降级、内部签名）、`common-security`（JWT 与权限注解）六个基础库，加上网关、认证、供应商零部件、订单、库存、报表六个服务。治理组件按职责分工：Nacos 负责注册与配置，Gateway 承担五条路由与限流鉴权，OpenFeign 带 `fallbackFactory` 与统一超时，Sentinel 管业务侧流控熔断，Seata AT 负责收货入库的跨库写，Redis 提供缓存与分布式锁，zipkin/Prometheus 提供链路与指标。网关保持 `:8081` 与 `/api/**` 不变，MCP 侧的 `ERP_BASE_URL` 与 23 个工具定义不变，仅新增服务账号 token 注入。鉴权采用网关与服务双层 JWT 校验，`/internal/**` 额外用 HMAC-SHA256 加 60 秒时间窗签名。默认零外部中间件可启动（H2 + 静态发现 + 本地缓存），`docker compose` 提供 15 个容器的完整编排。
 
 ---
 
