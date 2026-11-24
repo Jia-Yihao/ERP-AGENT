@@ -359,9 +359,9 @@ ERP-AGENT/
 │   ├── order-service/                 # 订单 / 申请审批 / Outbox :8083
 │   ├── inventory-service/             # 库存与原子扣减          :8084
 │   ├── report-service/                # 报表聚合                :8085
-│   ├── docker-compose.yml             # 12 容器编排
+│   ├── docker-compose.yml             # 15 容器编排
 │   ├── monitoring/ k8s/               # Prometheus / Grafana / K8s manifests
-│   └── README.md                      # 架构、23 条契约、启动与验收清单
+│   └── README.md                      # 架构、43 条接口（23 条 MCP 契约）、启动与验收清单
 │
 ├── src/                               # Python 后端（Agent / API / MCP）
 │   ├── agent/                         # Agent 核心
@@ -414,7 +414,7 @@ ERP-AGENT/
 | 文档 | 内容 |
 |---|---|
 | `README.md` | 项目总览、技术栈、系统架构与完整启动顺序 |
-| `backend/README.md` | ERP 微服务架构、23 条接口契约、启动与验收清单 |
+| `backend/README.md` | ERP 微服务架构、43 条接口与 23 条 MCP 契约、启动与验收清单 |
 | `frontend/README.md` | 前端启动与上游依赖 |
 | `WSL_START.md` | WSL 本机启动与版本回退笔记 |
 | `docs/` | Langfuse 可观测性、Skills 渐进披露、Agent 能力实测 |
@@ -482,13 +482,13 @@ MCP_SERVER_URL=http://localhost:9000
 SANDBOX_IMAGE=python:3.11-slim
 ```
 
-### 3. 启动 ERP 微服务后端（Nacos :8848、端口 8081~8086）
+### 3. 启动 ERP 微服务后端（端口 8081~8086，Nacos 可选）
 
 按 `backend/README.md` 的顺序，每个服务一个终端；命令需显式带 `--server.port`，避免终端注入的 `SERVER__PORT` 覆盖配置：
 
 ```bash
 cd backend
-docker compose up -d nacos              # 或外部 Nacos :8848
+docker compose up -d nacos              # 需要真实注册与配置下发时才起；本地静态发现可省略
 java -jar auth-service/target/erp-auth-service-1.0.0.jar --server.port=8086
 java -jar catalog-service/target/erp-catalog-service-1.0.0.jar --server.port=8082
 java -jar order-service/target/erp-order-service-1.0.0.jar --server.port=8083
@@ -498,7 +498,7 @@ java -jar gateway/target/erp-gateway-1.0.0.jar --server.port=8081
 cd ..
 ```
 
-`catalog-service` 需早于 `order-service` 与 `inventory-service`，`gateway` 最后起；Nacos 控制台在 http://localhost:8848/nacos。仅做联网搜索与基础对话时可跳过本步。
+`catalog-service` 需早于 `order-service` 与 `inventory-service`，`gateway` 最后起；未起 Nacos 时各服务以静态实例解析 `lb://`，需服务间一致性校验时设置 `ERP_INTERNAL_SECRET`。Nacos 控制台在 http://localhost:8848/nacos。仅做联网搜索与基础对话时可跳过本步。
 
 ### 4. 启动 MongoDB
 

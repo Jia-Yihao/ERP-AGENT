@@ -8,7 +8,6 @@ spring:
   autoconfigure:
     exclude: 'com.alibaba.cloud.sentinel.SentinelWebFluxAutoConfiguration'
   cloud:
-    compatibility-verifier:
     discovery:
       client:
         simple:
@@ -28,7 +27,7 @@ spring:
     sentinel:
       transport:
         dashboard: '${SENTINEL_DASHBOARD:localhost:8080}'
-        port: 8719
+        port: '${SENTINEL_TRANSPORT_PORT:8719}'
       eager: true
       datasource:
         flow:
@@ -48,6 +47,7 @@ spring:
     nacos:
       server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
       discovery:
+        enabled: '${NACOS_DISCOVERY_ENABLED:false}'
         namespace: '${NACOS_NAMESPACE:public}'
         register-enabled: '${NACOS_REGISTER_ENABLED:false}'
         fail-fast: false
@@ -69,11 +69,15 @@ spring:
         - id: order-route
           uri: lb://order-service
           predicates:
-            - Path=/api/orders/**,/api/requisitions/**,/api/receive/**,/api/outbox/**
+            - Path=/api/orders/**,/api/requisitions/**,/api/receives/**,/api/outbox/**
         - id: inventory-route
           uri: lb://inventory-service
           predicates:
             - Path=/api/inventory/**
+        - id: report-route
+          uri: lb://report-service
+          predicates:
+            - Path=/api/reports/**
         - id: auth-route
           uri: lb://auth-service
           predicates:
@@ -82,7 +86,7 @@ erp:
   security:
     enabled: '${ERP_SECURITY_ENABLED:true}'
   jwt:
-    secret: '${ERP_JWT_SECRET:erp-local-development-secret-key-32bytes-minimum}'
+    secret: '${ERP_JWT_SECRET:erp-cloud-dev-jwt-secret-change-me-32bytes}'
   ratelimit:
     capacity: 30
     refill-per-second: 10

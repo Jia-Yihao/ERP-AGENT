@@ -1,10 +1,14 @@
 package com.example.erp.common.security;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -14,7 +18,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -22,10 +25,19 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, SecurityProperties.class})
 public class SecurityAutoConfig {
 
-    private static final String DEFAULT_PERMIT_ALL = "/actuator/health/**,/v3/api-docs/**,/swagger-ui/**";
+    private static final Logger log = LoggerFactory.getLogger(SecurityAutoConfig.class);
+
+    @Bean
+    public FilterRegistrationBean<InternalSignatureFilter> internalSignatureFilter(ObjectMapper objectMapper) {
+        FilterRegistrationBean<InternalSignatureFilter> registration =
+                new FilterRegistrationBean<>(new InternalSignatureFilter(objectMapper));
+        registration.addUrlPatterns("/internal/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
+        return registration;
+    }
 
     @Bean
     @Order(1)
@@ -45,13 +57,14 @@ public class SecurityAutoConfig {
             JwtTokenProvider tokenProvider,
             RestAuthEntryPoint entryPoint,
             RestAccessDeniedHandler accessDeniedHandler,
-            @Value("${erp.security.permit-all:" + DEFAULT_PERMIT_ALL + "}") String[] permitAll) throws Exception {
+            SecurityProperties properties) throws Exception {
 
-        List<AntPathRequestMatcher> permitMatchers = Arrays.stream(permitAll)
+        List<AntPathRequestMatcher> permitMatchers = properties.getPermitAll().stream()
                 .map(String::trim)
                 .filter(path -> !path.isEmpty())
                 .map(AntPathRequestMatcher::new)
                 .toList();
+        log.info("security permit-all paths: {}", properties.getPermitAll());
 
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(tokenProvider, entryPoint, permitMatchers);
 

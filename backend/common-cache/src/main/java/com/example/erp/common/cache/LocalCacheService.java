@@ -2,16 +2,12 @@ package com.example.erp.common.cache;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-@Component
-@ConditionalOnMissingBean(name = "redisCacheService")
 public class LocalCacheService implements CacheService {
     private final Cache<String, Object> cache = Caffeine.newBuilder()
             .maximumSize(2000)

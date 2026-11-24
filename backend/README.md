@@ -1,6 +1,6 @@
 # 汽车零部件采购 ERP 微服务后端
 
-本目录是仓库自带的 ERP 后端子系统，Spring Cloud 微服务实现，对外提供 23 条 REST 接口，供 `src/mcp_server` 的 MCP 网关调用。网关监听 `8081` 并保持 `/api/**` 路径不变，因此 Python 侧的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均无需改动。项目总览、整体架构与完整启动顺序见根 [README.md](../README.md)。
+本目录是仓库自带的 ERP 后端子系统，Spring Cloud 微服务实现，对外提供 43 条 `/api` 接口，其中 23 条为 `src/mcp_server` 的 MCP 契约。网关监听 `8081` 并保持 `/api/**` 路径不变，因此 Python 侧的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均无需改动。项目总览、整体架构与完整启动顺序见根 [README.md](../README.md)。
 
 ## 架构
 
@@ -14,7 +14,7 @@
 | `erp-common-cache` | — | `CacheService` / `LockService` 双实现（Redis / Caffeine 本地）、AOP 幂等 |
 | `erp-common-feign` | — | Feign 拦截、错误解码、降级、内部调用签名的基础库 |
 | `erp-common-security` | — | JWT 签发解析、SecurityFilterChain、JwtAuthenticationFilter、权限注解、内部签名校验 |
-| `gateway` | 8081 | Spring Cloud Gateway：TraceId / CORS / 访问日志 / 限流 / JWT 校验 / 错误改写，四条 `lb://` 路由 |
+| `gateway` | 8081 | Spring Cloud Gateway：TraceId / CORS / 访问日志 / 限流 / JWT 校验 / 错误改写，五条 `lb://` 路由（catalog / order / inventory / report / auth） |
 | `auth-service` | 8086 | 登录、服务账号换 token、刷新、当前用户、登出；六张权限表 |
 | `catalog-service` | 8082 | 供应商 5 + 零部件 5 + 报价比价 3 + 供应商绩效 2；`/internal/parts/batch` |
 | `order-service` | 8083 | 订单 7 + 采购申请 5 + 收货 2 + Outbox 2；状态机与状态流水 |
@@ -33,13 +33,13 @@ Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5 + Alibaba 2023.0.3.2（Nacos
 
 ### 五项核心组件
 
-- **Nacos**：注册中心与配置中心，各服务 `spring.config.import=optional:nacos:...`；无 Nacos 时以 `SimpleDiscoveryClient` 静态实例解析 `lb://`，`NACOS_REGISTER_ENABLED=true` 或 docker profile 切换到真实注册。
-- **OpenFeign**：四个客户端均配置 `fallbackFactory`，统一超时 3s/5s；`TraceIdRequestInterceptor` 透传 traceId 与用户上下文头。
-- **Sentinel**：网关与五个业务服务接入 dashboard `:8080`，流控与降级规则由 Nacos `SENTINEL_GROUP` 数据源下发，种子规则在 `configs/sentinel/`。
-- **Gateway**：4 条路由 + 6 个全局过滤器（traceId、CORS、访问日志、限流、JWT、错误改写）；本地以静态实例解析，docker profile 走 Nacos 发现。
+- **Nacos**：注册中心与配置中心，各服务 `spring.config.import=optional:nacos:...`；本地 `NACOS_DISCOVERY_ENABLED=false` 由 `SimpleDiscoveryClient` 静态实例解析 `lb://`，docker profile 置 `true` 并排除静态发现自动配置，走真实注册与发现。
+- **OpenFeign**：五个客户端均配置 `fallbackFactory`，统一超时 3s/5s；`TraceIdRequestInterceptor` 透传 traceId、用户上下文与 `Authorization`，`InternalSignatureInterceptor` 为 `/internal/**` 补签 `X-Internal-Token`。
+- **Sentinel**：五个业务服务接入 dashboard `:8080`，流控与降级规则由 Nacos `SENTINEL_GROUP` 数据源下发，`configs/sentinel/` 的 12 份种子规则由 `nacos-seed` 一次性任务写入 Nacos。
+- **Gateway**：5 条路由 + 6 个全局过滤器（traceId、CORS、访问日志、限流、JWT、错误改写）；本地以静态实例解析，docker profile 走 Nacos 发现，Responses 统一回写 `X-Trace-Id`。
 - **Seata**：AT 模式，`erp-tx-group` 事务组经 Nacos 发现 `seata-server`；undo_log 表已建，事务入口为 `POST /api/receives/create-with-stock`；本地 `SEATA_ENABLED=false` 时注解为 no-op。
 
-`configs/mysql/init.sql` 初始化四个业务库与 Seata 全局表，`configs/seata/` 提供注册与配置中心参数，`docker compose up -d` 一键拉起 14 个容器。网关锁定 gateway-server 4.1.3 以匹配 Spring Framework 6.1.6。
+`configs/mysql/init.sql` 初始化四个业务库与 Seata 全局表，`configs/seata/` 提供注册与配置中心参数，`docker compose up -d` 一键拉起 15 个容器（含发布规则与 Seata 配置的 `nacos-seed` 一次性任务）。网关锁定 gateway-server 4.1.3 以匹配 Spring Framework 6.1.6。
 
 Spring Cloud 2023.0.x 已结束开源支持。本工程用于微服务架构实践与本地验收，生产部署需升级到受支持的 Spring Boot / Spring Cloud release train。
 
@@ -107,22 +107,32 @@ curl "http://localhost:8081/api/inventory/check"
 
 ## 验收清单
 
-- [x] 12 个模块 `mvn -DskipTests clean package` 构建通过，产出 6 个可执行 fat jar 与 6 个公共库 jar
-- [ ] Nacos 控制台 `http://localhost:8848/nacos` 可见 6 个注册实例
-- [ ] 23 条接口经 `:8081` 返回 HTTP 200 且 `code=200`
-- [ ] `orders/get/{id}` 返回 `orderDetail[]`，`orders/search-details` 带 `partName / supplierName`
-- [ ] `inventory/warning` 与 `inventory/page` 每条带 `partDetail`
-- [ ] `inventory/outbound` 超量返回 `code=409` 且库存不变
-- [ ] `orders/create` 重复订单号返回非 200 `code`，`totalAmount` 以明细重算为准
-- [ ] MCP 网关 `python -m src.mcp_server.server_main` 加载 23 个工具并返回真实数据
-- [ ] `python -m evals.agent_live` 跑通真实订单审批链路
+- [x] 12 个模块 `mvn -B -DskipTests clean package` 构建通过，产出 6 个可执行 fat jar 与 6 个公共库 jar
+- [x] 六个服务在本机 8081–8086 启动，`/actuator/health` 全部 `UP`
+- [x] 网关五条 `lb://` 路由经静态实例解析：`suppliers / parts / orders / inventory / reports` 均返回 `code=200`
+- [x] 无 token 请求返回 `code=401`，`X-Trace-Id` 在响应头回写并在三个服务日志中一致
+- [x] 账号登录、服务账号换 token、`/api/auth/me` 正常；服务账号受 scope 约束访问业务接口
+- [x] 内部签名：设置 `ERP_INTERNAL_SECRET` 后，未签名 `POST /internal/parts/batch` 返回 `code=401`，签名调用可返回零件明细并完成订单与库存 VO 富化
+- [x] `orders/statistics` 返回 `totalOrders / totalAmount / statusCounts / partCount`
+- [x] `reports/summary` 通过 Feign 汇总订单与库存，两段 `data` 均非空
+- [x] `orders/update-status` 合法流转 `code=200`，非法流转 `code=4093`
+- [x] `receives/create-with-stock` 收货入库，库存数量由 120 增至 122
+- [x] 请购创建、提交、审批通过，重复审批返回 `code=409`
+- [x] `quotes/compare/{partId}` 按单价升序返回，`performance/recalculate` 产出评分
+- [x] 网关限流：同一路径连续 45 次请求中 9 次返回 `code=429`
+- [ ] Nacos 控制台可见 6 个注册实例（需 `docker compose up -d`）
+- [ ] Sentinel 规则在 dashboard 生效并触发流控（需 Nacos 发布规则）
+- [ ] Seata AT 全局事务在跨库失败时回滚（需 MySQL + seata-server）
+- [ ] MCP 网关加载 23 个工具并端到端返回真实数据
 
 ## 核验口径
 
-工程交付时执行的验证为一次全模块构建（`mvn -B -q -DskipTests clean package`，退出码 0）、一次静态契约核对（23 条 Controller 路径与 `src/mcp_server/tools/*.py` 逐条比对，无缺漏、无多出），以及一次单服务启动冒烟（`catalog-service` 在 `:8082` 启动，验证供应商查询、零件分页、零件详情、按供应商查询、内部批量接口的响应结构与中文数据，业务错误保持 HTTP 200）。未运行测试套件、未启动注册中心与网关、未发起服务间 Feign 调用、未执行 MCP 端到端联调，也未连接真实 MySQL。构建依赖落在 `D:/java/m2-repository`，C 盘 `.m2` 未写入。验收清单中除构建项外均为待执行项，需要按「快速启动」逐条实测后方可宣称通过。
+本机一次全量构建（`mvn -B -DskipTests clean package`，退出码 0）后启动 auth、catalog、order、inventory、report、gateway 六个进程，以 `ERP_INTERNAL_SECRET=dev-internal-secret` 运行，未启动 Nacos、Redis、MySQL、Sentinel dashboard 与 Zipkin，全部走 H2 内存库与静态服务发现。按上表逐项发起 HTTP 请求，覆盖鉴权、路由、跨服务调用、内部签名、状态机、收货入库、请购审批、报价比价、绩效重算、报表聚合与网关限流，结果与表中标记一致。
+
+未验证部分为依赖外部中间件的链路：Nacos 真实注册与配置下发、Sentinel 规则加载与限流触发、Seata 全局事务回滚、MySQL 方言下的建表与查询、Docker 编排整体拉起、MCP 与 FastAPI 端到端。这些链路在 `docker-compose.yml` 中已配置，需在有 Docker 的环境执行 `docker compose up -d` 后复测。
 
 接口路径与响应结构的依据为 `src/mcp_server/tools/` 下四个工具定义文件、`src/mcp_server/http_base.py` 与项目根 `.env.example`；整体架构、启动顺序与文档索引见根 [README.md](../README.md)。
 
 ## 边界
 
-本工程覆盖供应商、零部件、采购订单、库存四个采购域，并补齐报价比价、供应商绩效、采购申请与审批、收货、订单状态机、Outbox 补偿与报表聚合。鉴权为网关与服务双层 JWT 校验，MCP 侧以服务账号换取 token；`ERP_SECURITY_ENABLED=false` 仅用于本地排障。注册与配置走 Nacos，Redis 与 MySQL 为可选增强，缺省以本地实现与 H2 运行。跨服务一致性用 Outbox 补偿，收货入库事件由定时任务扫描发送，不引入分布式事务组件。
+本工程覆盖供应商、零部件、采购订单、库存四个采购域，并补齐报价比价、供应商绩效、采购申请与审批、收货、订单状态机、Outbox 补偿与报表聚合。鉴权为网关与服务双层 JWT 校验，服务间调用 `/internal/**` 由 `X-Internal-Token` 的 HMAC-SHA256 与 60 秒时间窗校验，`ERP_INTERNAL_SECRET` 未配置时该层不启用；MCP 侧以服务账号换取 token；`ERP_SECURITY_ENABLED=false` 仅用于本地排障。注册与配置走 Nacos，Redis 与 MySQL 为可选增强，缺省以本地缓存实现与 H2 运行。收货入库的跨库写由 Seata AT 模式保证一致，其余跨服务通知走 Outbox 补偿。

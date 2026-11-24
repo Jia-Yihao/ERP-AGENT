@@ -1,12 +1,9 @@
 spring:
   cloud:
-    discovery:
-      client:
-        simple:
-          instances: {}
     nacos:
       discovery:
+        enabled: true
         register-enabled: true
         server-addr: '${NACOS_SERVER_ADDR:nacos:8848}'
   autoconfigure:
-    exclude: ""
+    exclude: '${SPRING_AUTOCONFIGURE_EXCLUDE:org.springframework.cloud.client.discovery.simple.SimpleDiscoveryClientAutoConfiguration,org.springframework.cloud.client.discovery.simple.reactive.SimpleReactiveDiscoveryClientAutoConfiguration}'

@@ -59,6 +59,23 @@ services:
       timeout: 3s
       retries: 10
 
+  # 一次性任务：把 Sentinel 规则与 Seata 服务端配置写入 Nacos，退出码 0 表示发布完成
+  nacos-seed:
+    image: curlimages/curl:8.8.0
+    container_name: erp-nacos-seed
+    entrypoint: ["/bin/sh", "/seed/seed-nacos.sh"]
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+    volumes:
+      - ./configs:/seed:ro
+    networks:
+      - erp-net
+    depends_on:
+      nacos:
+        condition: service_healthy
+    restart: "no"
+
   mysql:
     image: mysql:8.0
     container_name: erp-mysql
@@ -160,6 +177,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
     healthcheck:
@@ -199,6 +218,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       zipkin:
         condition: service_started
     healthcheck:
@@ -224,6 +245,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       redis:
@@ -251,6 +274,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       redis:
@@ -278,6 +303,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       redis:
@@ -305,6 +332,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       redis:
@@ -332,6 +361,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      nacos-seed:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:

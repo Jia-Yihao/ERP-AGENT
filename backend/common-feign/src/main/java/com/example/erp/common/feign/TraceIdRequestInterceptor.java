@@ -29,7 +29,7 @@ public class TraceIdRequestInterceptor implements RequestInterceptor {
             copyHeader(request, template, Constants.USER_ID_HEADER);
             copyHeader(request, template, Constants.USER_NAME_HEADER);
             copyHeader(request, template, Constants.USER_ROLES_HEADER);
-            copyHeader(request, template, Constants.INTERNAL_TOKEN_HEADER);
+            copyHeader(request, template, "Authorization");
         }
     }
 

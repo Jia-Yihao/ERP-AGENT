@@ -20,7 +20,8 @@ public class TraceIdFilter implements GlobalFilter, Ordered {
         if (traceId == null || traceId.isBlank()) traceId = UUID.randomUUID().toString().replace("-", "");
         String tid = traceId;
         ServerHttpRequest request = exchange.getRequest().mutate()
-                .header(Constants.TRACE_ID_HEADER, tid).build();
+                .headers(h -> h.set(Constants.TRACE_ID_HEADER, tid)).build();
+        exchange.getResponse().getHeaders().set(Constants.TRACE_ID_HEADER, tid);
         MDC.put(Constants.TRACE_ID_MDC_KEY, tid);
         return chain.filter(exchange.mutate().request(request).build())
                 .doFinally(s -> MDC.remove(Constants.TRACE_ID_MDC_KEY));

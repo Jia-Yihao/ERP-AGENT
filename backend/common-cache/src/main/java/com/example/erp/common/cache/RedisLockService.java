@@ -1,15 +1,11 @@
 package com.example.erp.common.cache;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-@Component
-@ConditionalOnProperty(prefix = "erp.cache", name = "type", havingValue = "redis")
 public class RedisLockService implements LockService {
     private static final String UNLOCK_SCRIPT =
             "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";

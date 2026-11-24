@@ -58,9 +58,11 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
             String username = String.valueOf(claims.get("username", String.class));
             List<String> roles = claims.get("roles", List.class);
             ServerHttpRequest req = exchange.getRequest().mutate()
-                    .header(Constants.USER_ID_HEADER, userId == null ? "" : userId)
-                    .header(Constants.USER_NAME_HEADER, username)
-                    .header(Constants.USER_ROLES_HEADER, roles == null ? "" : String.join(",", roles))
+                    .headers(h -> {
+                        h.set(Constants.USER_ID_HEADER, userId == null ? "" : userId);
+                        h.set(Constants.USER_NAME_HEADER, username);
+                        h.set(Constants.USER_ROLES_HEADER, roles == null ? "" : String.join(",", roles));
+                    })
                     .build();
             return chain.filter(exchange.mutate().request(req).build());
         } catch (Exception e) {

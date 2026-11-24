@@ -21,5 +21,5 @@ HTTP_MAX_CONNECTIONS = int(os.getenv("HTTP_MAX_CONNECTIONS", "20"))
 
 # ERP 服务账号（用于换取访问 token）
 ERP_CLIENT_ID = os.getenv("ERP_CLIENT_ID", "mcp-gateway")
-ERP_CLIENT_SECRET = os.getenv("ERP_CLIENT_SECRET", "mcp-secret-change-me")
+ERP_CLIENT_SECRET = os.getenv("ERP_CLIENT_SECRET", "change-me")
 ERP_AUTH_ENABLED = os.getenv("ERP_AUTH_ENABLED", "true").lower() in ("1", "true", "yes")

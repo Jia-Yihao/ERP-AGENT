@@ -2,7 +2,6 @@ server:
   port: 8086
 spring:
   cloud:
-    compatibility-verifier:
     discovery:
       client:
         simple:
@@ -22,7 +21,7 @@ spring:
     sentinel:
       transport:
         dashboard: '${SENTINEL_DASHBOARD:localhost:8080}'
-        port: 8719
+        port: '${SENTINEL_TRANSPORT_PORT:8719}'
       eager: true
       datasource:
         flow:
@@ -42,6 +41,7 @@ spring:
     nacos:
       server-addr: '${NACOS_SERVER_ADDR:localhost:8848}'
       discovery:
+        enabled: '${NACOS_DISCOVERY_ENABLED:false}'
         namespace: '${NACOS_NAMESPACE:public}'
         register-enabled: '${NACOS_REGISTER_ENABLED:false}'
         fail-fast: false
@@ -73,7 +73,7 @@ mybatis-plus:
       id-type: auto
 erp:
   jwt:
-    secret: '${ERP_JWT_SECRET:${JWT_SECRET:erp-cloud-dev-jwt-secret-change-me-32bytes}}'
+    secret: '${ERP_JWT_SECRET:erp-cloud-dev-jwt-secret-change-me-32bytes}'
     access-ttl-seconds: 7200
     refresh-ttl-seconds: 604800
     issuer: erp-cloud
@@ -87,6 +87,8 @@ management:
     nacos-discovery:
       enabled: false
     nacos-config:
+      enabled: false
+    redis:
       enabled: false
   endpoints:
     web:

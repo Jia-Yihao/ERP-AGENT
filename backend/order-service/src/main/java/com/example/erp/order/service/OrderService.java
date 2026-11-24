@@ -120,8 +120,11 @@ public class OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         long totalOrders = 0;
         for (Map<String, Object> row : rows) {
-            int status = ((Number) row.get("status")).intValue();
-            long cnt = ((Number) row.get("cnt")).longValue();
+            Number statusValue = numberColumn(row, "status");
+            Number countValue = numberColumn(row, "cnt");
+            if (statusValue == null || countValue == null) continue;
+            int status = statusValue.intValue();
+            long cnt = countValue.longValue();
             statusCounts.put(String.valueOf(status), cnt);
             totalOrders += cnt;
         }
@@ -131,6 +134,18 @@ public class OrderService {
         result.put("statusCounts", statusCounts);
         result.put("partCount", detailMapper.selectCount(null));
         return result;
+    }
+
+    /** 聚合查询的列标签在 H2 下为大写、MySQL 下为小写，按忽略大小写取值。 */
+    private static Number numberColumn(Map<String, Object> row, String column) {
+        Object direct = row.get(column);
+        if (direct instanceof Number number) return number;
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(column) && entry.getValue() instanceof Number number) {
+                return number;
+            }
+        }
+        return null;
     }
 
     @Transactional

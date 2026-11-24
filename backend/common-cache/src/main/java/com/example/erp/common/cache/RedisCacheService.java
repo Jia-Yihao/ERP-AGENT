@@ -1,9 +1,7 @@
 package com.example.erp.common.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -11,8 +9,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-@Component
-@ConditionalOnProperty(prefix = "erp.cache", name = "type", havingValue = "redis")
 public class RedisCacheService implements CacheService {
     private static final Duration NULL_TTL = Duration.ofMinutes(2);
     private static final Duration LOCK_TTL = Duration.ofSeconds(5);

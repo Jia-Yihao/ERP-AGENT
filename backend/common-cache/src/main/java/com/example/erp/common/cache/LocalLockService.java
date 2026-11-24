@@ -1,7 +1,5 @@
 package com.example.erp.common.cache;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -10,8 +8,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-@Component
-@ConditionalOnMissingBean(name = "redisLockService")
 public class LocalLockService implements LockService {
     private final Map<String, Instant> locks = new ConcurrentHashMap<>();
     private final Map<String, String> tokens = new ConcurrentHashMap<>();
