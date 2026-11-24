@@ -1,6 +1,6 @@
 # 汽车零部件采购 ERP 微服务后端
 
-本目录是仓库自带的 ERP 后端子系统，Spring Cloud 微服务实现，对外提供 43 条 `/api` 接口，其中 23 条为 `src/mcp_server` 的 MCP 契约。网关监听 `8081` 并保持 `/api/**` 路径不变，因此 Python 侧的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均无需改动。项目总览、整体架构与完整启动顺序见根 [README.md](../README.md)。
+本目录是仓库自带的 ERP 后端子系统，Spring Cloud 微服务实现，对外提供 44 条 `/api` 接口，其中 23 条为 `src/mcp_server` 的 MCP 契约。网关监听 `8081` 并保持 `/api/**` 路径不变，因此 Python 侧的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均无需改动。项目总览、整体架构与完整启动顺序见根 [README.md](../README.md)。
 
 ## 架构
 
@@ -17,7 +17,7 @@
 | `gateway` | 8081 | Spring Cloud Gateway：TraceId / CORS / 访问日志 / 限流 / JWT 校验 / 错误改写，五条 `lb://` 路由（catalog / order / inventory / report / auth） |
 | `auth-service` | 8086 | 登录、服务账号换 token、刷新、当前用户、登出；六张权限表 |
 | `catalog-service` | 8082 | 供应商 5 + 零部件 5 + 报价比价 3 + 供应商绩效 2；`/internal/parts/batch` |
-| `order-service` | 8083 | 订单 7 + 采购申请 5 + 收货 2 + Outbox 2；状态机与状态流水 |
+| `order-service` | 8083 | 订单 7 + 采购申请 5 + 收货 3 + Outbox 2；状态机与状态流水 |
 | `inventory-service` | 8084 | 库存 6；Lua 条件原子扣减 + 本地锁降级 |
 | `report-service` | 8085 | 报表聚合，Feign 汇总订单与库存统计 |
 

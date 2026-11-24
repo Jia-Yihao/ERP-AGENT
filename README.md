@@ -362,7 +362,7 @@ ERP-AGENT/
 │   ├── report-service/                # 报表聚合                :8085
 │   ├── docker-compose.yml             # 15 容器编排
 │   ├── monitoring/ k8s/               # Prometheus / Grafana / K8s manifests
-│   └── README.md                      # 架构、43 条接口（23 条 MCP 契约）、启动与验收清单
+│   └── README.md                      # 架构、44 条接口（23 条 MCP 契约）、启动与验收清单
 │
 ├── src/                               # Python 后端（Agent / API / MCP）
 │   ├── agent/                         # Agent 核心
@@ -415,7 +415,7 @@ ERP-AGENT/
 | 文档 | 内容 |
 |---|---|
 | `README.md` | 项目总览、技术栈、系统架构与完整启动顺序 |
-| `backend/README.md` | ERP 微服务架构、43 条接口与 23 条 MCP 契约、启动与验收清单 |
+| `backend/README.md` | ERP 微服务架构、44 条接口与 23 条 MCP 契约、启动与验收清单 |
 | `frontend/README.md` | 前端启动与上游依赖 |
 | `WSL_START.md` | WSL 本机启动与版本回退笔记 |
 | `docs/` | Langfuse 可观测性、Skills 渐进披露、Agent 能力实测 |
