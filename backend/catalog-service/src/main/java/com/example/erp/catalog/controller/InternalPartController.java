@@ -1,7 +1,7 @@
 package com.example.erp.catalog.controller;
 
 import com.example.erp.catalog.service.PartService;
-import com.example.erp.common.Dtos;
+import com.example.erp.common.core.Dtos;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

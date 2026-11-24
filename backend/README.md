@@ -6,12 +6,19 @@
 
 | 模块 | 端口 | 职责 |
 |---|---|---|
-| `common` | — | 统一响应 `R`、分页 `PageResult`、业务异常与全局异常处理、MyBatis-Plus 分页插件、跨服务 DTO |
+| `erp-common-core` | — | 统一响应 `R`、分页 `PageResult`、错误码 `ErrorCode`、业务异常、共享常量、跨服务 DTO |
+| `erp-common-web` | — | 全局异常处理，统一 HTTP 200 + 错误码出口 |
+| `erp-common-data` | — | MyBatis-Plus 插件：分页（`size` 上限 100）、乐观锁 |
+| `erp-common-cache` | — | 缓存双实现、分布式锁、幂等切面的基础库 |
+| `erp-common-feign` | — | Feign 拦截、错误解码、降级、内部调用签名的基础库 |
+| `erp-common-security` | — | JWT 签发解析、SecurityFilterChain 模板、权限注解的基础库 |
 | `registry` | 8761 | Eureka Server，服务注册与发现 |
 | `gateway` | 8081 | Spring Cloud Gateway，对外唯一入口，按路径路由到三个业务服务 |
 | `catalog-service` | 8082 | 供应商 5 条 + 零部件 5 条接口，`/internal/parts/batch` 供服务间调用 |
 | `order-service` | 8083 | 采购订单 7 条接口 |
 | `inventory-service` | 8084 | 库存 6 条接口 |
+
+业务服务依赖 `erp-common-web` 与 `erp-common-data`，网关只依赖 `erp-common-core`（不引入 Spring MVC，避免与 WebFlux 冲突）。
 
 Gateway 只路由 `/api/**`，`/internal/**` 不对外暴露。订单明细的 `partName / supplierName` 与库存 VO 的嵌套 `partDetail` 由 OpenFeign 调用 `catalog-service` 批量组装，一次请求取回全部零件信息，避免逐条 N+1 调用。
 
@@ -19,7 +26,7 @@ Gateway 只路由 `/api/**`，`/internal/**` 不对外暴露。订单明细的 `
 
 ## 技术栈
 
-Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5（Leyton）、Spring Cloud Gateway、Netflix Eureka、OpenFeign + LoadBalancer、MyBatis-Plus 3.5.9（`mybatis-plus-spring-boot3-starter` + `mybatis-plus-jsqlparser`）、H2（默认）/ MySQL 8（可选）、Maven。
+Java 17、Spring Boot 3.2.5、Spring Cloud 2023.0.5（Leyton）、Spring Cloud Gateway、Netflix Eureka、OpenFeign + LoadBalancer、MyBatis-Plus 3.5.9（`mybatis-plus-spring-boot3-starter` + `mybatis-plus-jsqlparser`，分页上限 100、乐观锁插件）、H2（默认）/ MySQL 8（可选）、Maven 3.9。父 POM 统一管理 MapStruct、springdoc、jjwt、p6spy、Testcontainers、JaCoCo 版本，编译期挂 Lombok 与 MapStruct 注解处理器。
 
 Spring Cloud 2023.0.x 已结束开源支持。本工程用于微服务架构实践与本地验收，生产部署需升级到受支持的 Spring Boot / Spring Cloud release train。
 
@@ -85,7 +92,7 @@ curl "http://localhost:8081/api/inventory/check"
 
 ## 验收清单
 
-- [x] 6 个模块 `mvn -DskipTests clean package` 构建通过，产出 5 个可执行 fat jar 与 1 个公共库 jar
+- [x] 11 个模块 `mvn -DskipTests clean package` 构建通过，产出 5 个可执行 fat jar 与 6 个公共库 jar
 - [ ] Eureka 控制台 `http://localhost:8761` 可见 4 个注册实例
 - [ ] 23 条接口经 `:8081` 返回 HTTP 200 且 `code=200`
 - [ ] `orders/get/{id}` 返回 `orderDetail[]`，`orders/search-details` 带 `partName / supplierName`

@@ -1,6 +1,6 @@
 package com.example.erp.inventory.client;
 
-import com.example.erp.common.Dtos;
+import com.example.erp.common.core.Dtos;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

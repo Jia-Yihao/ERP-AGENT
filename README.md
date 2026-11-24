@@ -123,7 +123,7 @@ TYPESAFE_MODEL=jev-1.13.0
 | **可观测性** | Langfuse（可选，默认关闭） | 元数据追踪、Token 用量与验收评分；不采集对话正文 |
 | **Agent 框架** | DeepAgent + LangGraph | 状态图引擎，支持中断/恢复/子Agent |
 | **MCP 协议** | FastMCP + SSE | Agent ↔ ERP 的工具桥接层，把 23 个工具转发到 `ERP_BASE_URL` |
-| **ERP 后端** | Java 17 + Spring Boot 3.2.5 + Spring Cloud 2023.0.5 | Eureka 注册发现、Gateway 网关、OpenFeign；`backend/` 六模块 |
+| **ERP 后端** | Java 17 + Spring Boot 3.2.5 + Spring Cloud 2023.0.5 | Eureka 注册发现、Gateway 网关、OpenFeign；`backend/` 十一模块（六个基础库 + 注册中心 + 网关 + 三个业务服务） |
 | **ERP 持久层** | MyBatis-Plus 3.5.9 + H2 / MySQL 8 | 三个业务服务各自独立库，写事务本地 `@Transactional` |
 | **Web 框架** | FastAPI + Uvicorn | SSE 流式响应 |
 | **前端** | Next.js 16 + React 19 + TailwindCSS 4 | 流式对话 UI + 中断交互 |
@@ -343,9 +343,14 @@ ERP-AGENT/
 │   └── package.json
 │
 ├── backend/                           # Spring Cloud 微服务 ERP（Java 17 / Maven）
-│   ├── pom.xml                        # 父 POM（6 模块聚合）
+│   ├── pom.xml                        # 父 POM（11 模块聚合 + 版本与插件管理）
 │   ├── .mvn/maven.config              # 本地仓库指向 D:/java/m2-repository
-│   ├── common/                        # R / PageResult / 全局异常 / 分页插件 / 跨服务 DTO
+│   ├── common-core/                   # R / PageResult / ErrorCode / 常量 / 跨服务 DTO
+│   ├── common-web/                    # 全局异常处理
+│   ├── common-data/                   # MyBatis-Plus 分页与乐观锁插件
+│   ├── common-cache/                  # 缓存、分布式锁、幂等
+│   ├── common-feign/                  # Feign 拦截、降级、内部签名
+│   ├── common-security/               # JWT、Security 模板、权限注解
 │   ├── registry/                      # Eureka Server           :8761
 │   ├── gateway/                       # Spring Cloud Gateway    :8081
 │   ├── catalog-service/               # 供应商 5 + 零部件 5     :8082
@@ -601,7 +606,7 @@ Agent 不直接调用 ERP API，而是通过 MCP Server 提供的 23 个标准�
 WARM 摘要在每次模型调用前刷新，最多 4000 字符；更早的任务与程序记忆由 `read_memory` 按需检索，采用 BM25、时间衰减、引用频次和置信度加权。默认偏好抽取使用规则，不额外调用 LLM；开启 `MEMORY_LLM_EXTRACTION` 后会增加模型调用成本。尚未测量真实任务的 token 节省比例。
 
 ### 13. 内置 Spring Cloud 微服务 ERP
-`backend/` 提供注册中心（Eureka）、网关（Spring Cloud Gateway）与供应商零部件、订单、库存三个业务服务；网关保持 `:8081` 与 `/api/**` 不变，因此 MCP 网关的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均不需要改动。跨服务读取由 OpenFeign 批量装配零件信息，写事务留在单服务本地，未引入分布式事务。
+`backend/` 为 11 个 Maven 模块：`common-core`（响应体、错误码、分页、跨服务 DTO）、`common-web`（全局异常）、`common-data`（MyBatis-Plus 分页与乐观锁）、`common-cache`（缓存、锁、幂等）、`common-feign`（Feign 拦截与降级）、`common-security`（JWT 与权限注解）六个基础库，加上注册中心（Eureka）、网关（Spring Cloud Gateway）与供应商零部件、订单、库存三个业务服务；网关保持 `:8081` 与 `/api/**` 不变，因此 MCP 网关的 `ERP_BASE_URL`、23 个工具定义、FastAPI 与前端均不需要改动。跨服务读取由 OpenFeign 批量装配零件信息，写事务留在单服务本地，未引入分布式事务。
 
 ---
 

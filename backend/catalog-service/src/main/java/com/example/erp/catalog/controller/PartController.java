@@ -2,8 +2,8 @@ package com.example.erp.catalog.controller;
 
 import com.example.erp.catalog.entity.Part;
 import com.example.erp.catalog.service.PartService;
-import com.example.erp.common.PageResult;
-import com.example.erp.common.R;
+import com.example.erp.common.core.PageResult;
+import com.example.erp.common.core.R;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 

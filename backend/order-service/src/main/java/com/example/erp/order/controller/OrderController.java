@@ -1,7 +1,7 @@
 package com.example.erp.order.controller;
 
-import com.example.erp.common.PageResult;
-import com.example.erp.common.R;
+import com.example.erp.common.core.PageResult;
+import com.example.erp.common.core.R;
 import com.example.erp.order.entity.PurchaseOrder;
 import com.example.erp.order.entity.PurchaseOrderDetail;
 import com.example.erp.order.service.OrderService;

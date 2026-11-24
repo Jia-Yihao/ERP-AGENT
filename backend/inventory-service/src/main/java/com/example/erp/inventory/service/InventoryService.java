@@ -1,9 +1,9 @@
 package com.example.erp.inventory.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.example.erp.common.BizException;
-import com.example.erp.common.Dtos;
-import com.example.erp.common.PageResult;
+import com.example.erp.common.core.BizException;
+import com.example.erp.common.core.Dtos;
+import com.example.erp.common.core.PageResult;
 import com.example.erp.inventory.client.CatalogClient;
 import com.example.erp.inventory.entity.Inventory;
 import com.example.erp.inventory.entity.InventoryLog;

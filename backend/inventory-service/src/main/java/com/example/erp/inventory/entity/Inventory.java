@@ -2,7 +2,7 @@ package com.example.erp.inventory.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.example.erp.common.Dtos;
+import com.example.erp.common.core.Dtos;
 import lombok.Data;
 
 @Data

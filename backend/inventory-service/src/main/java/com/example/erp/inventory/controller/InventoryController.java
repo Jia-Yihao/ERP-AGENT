@@ -1,7 +1,7 @@
 package com.example.erp.inventory.controller;
 
-import com.example.erp.common.PageResult;
-import com.example.erp.common.R;
+import com.example.erp.common.core.PageResult;
+import com.example.erp.common.core.R;
 import com.example.erp.inventory.entity.Inventory;
 import com.example.erp.inventory.service.InventoryService;
 import lombok.RequiredArgsConstructor;
