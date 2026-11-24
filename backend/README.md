@@ -73,11 +73,12 @@ curl "http://localhost:8081/api/inventory/check"
 
 | 服务 | 库 | 表 |
 |---|---|---|
-| catalog-service | `mem:catalog` | `supplier`、`part` |
-| order-service | `mem:orders` | `purchase_order`、`purchase_order_detail` |
-| inventory-service | `mem:inventory` | `inventory`、`inventory_log` |
+| auth-service | `mem:auth` | `sys_user`、`sys_role`、`sys_permission`、`sys_user_role`、`sys_role_permission`、`sys_client` |
+| catalog-service | `mem:catalog` | `supplier`、`part`、`supplier_quote`、`supplier_performance` |
+| order-service | `mem:orders` | `purchase_order`、`purchase_order_detail`、`purchase_requisition`、`requisition_approval`、`purchase_receive`、`order_status_log`、`outbox_event` |
+| inventory-service | `mem:inventory` | `part_snapshot`、`inventory`、`inventory_log` |
 
-`schema.sql` 使用 H2 MySQL 兼容模式与 MySQL 8 均支持的语法子集，`data.sql` 载入 6 家汽车供应商、8 种零部件、2 张示例订单与 8 条库存记录（含预警样本）。`spring.sql.init.encoding=UTF-8` 使中文种子数据按 UTF-8 读入，避免 Windows 平台默认编码造成的乱码。`spring.sql.init.mode=always` 会在每次启动重置数据，适用于演示与验收，生产环境应改为 `never` 并使用版本化迁移。
+`schema.sql` 使用 H2 MySQL 兼容模式与 MySQL 8 均支持的语法子集，四库共 20 张表，除 `part_snapshot` 外均继承 `BaseEntity` 审计字段。`data.sql` 载入 6 家汽车供应商（一汽大众、上汽大众、博世、采埃孚、大陆集团、华域汽车）、8 种零部件、24 条报价、6 条绩效、2 张示例订单、8 条库存记录（含预警样本）与 RBAC 种子。`spring.sql.init.encoding=UTF-8` 使中文种子数据按 UTF-8 读入，避免 Windows 平台默认编码造成的乱码。`spring.sql.init.mode=always` 会在每次启动重置数据，适用于演示与验收，生产环境应改为 `never` 并使用版本化迁移。
 
 切换 MySQL 时设置环境变量 `DB_URL`、`DB_DRIVER=com.mysql.cj.jdbc.Driver`、`DB_USER`、`DB_PASS`，并先手动执行各服务的 `schema.sql`。DDL 未建二级索引，生产环境需按查询条件补索引。
 
@@ -97,7 +98,7 @@ curl "http://localhost:8081/api/inventory/check"
 ## 验收清单
 
 - [x] 12 个模块 `mvn -DskipTests clean package` 构建通过，产出 6 个可执行 fat jar 与 6 个公共库 jar
-- [ ] Eureka 控制台 `http://localhost:8761` 可见 4 个注册实例
+- [ ] Nacos 控制台 `http://localhost:8848/nacos` 可见 6 个注册实例
 - [ ] 23 条接口经 `:8081` 返回 HTTP 200 且 `code=200`
 - [ ] `orders/get/{id}` 返回 `orderDetail[]`，`orders/search-details` 带 `partName / supplierName`
 - [ ] `inventory/warning` 与 `inventory/page` 每条带 `partDetail`

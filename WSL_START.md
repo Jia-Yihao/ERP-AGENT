@@ -37,7 +37,7 @@
 
 ## 服务启动
 
-ERP 后端是仓库内的 Java 17 / Maven 工程，位于 `backend/`，构建与逐服务启动命令见 `backend/README.md`。WSL 中按 `registry → catalog-service → order-service / inventory-service → gateway` 的顺序占用 8761 与 8081~8084 端口；未启动 ERP 时 MCP 的 23 个业务工具无法返回数据，联网搜索与基础对话仍可用。
+ERP 后端是仓库内的 Java 17 / Maven 工程，位于 `backend/`，构建与逐服务启动命令见 `backend/README.md`。WSL 中按 `auth-service → catalog-service → order-service / inventory-service / report-service → gateway` 的顺序占用 8081~8086 端口，注册与配置走 Nacos `:8848`（完整编排用 `docker compose -f backend/docker-compose.yml up -d`）；未启动 ERP 时 MCP 的 23 个业务工具无法返回数据，联网搜索与基础对话仍可用。
 
 Python 后端与前端按下列终端分别启动：
 
